@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>VAL — expériences</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=Dela+Gothic+One&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#000000;
+    --fg:#ffffff;
+    --mid:#8a8a8a;
+    --dim:#5c5c5c;
+    --line:rgba(255,255,255,0.14);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{
+    margin:0; padding:0;
+    height:100%; width:100%;
+    overflow:hidden;
+    background:var(--bg); color:var(--fg);
+    font-family:'IBM Plex Sans', -apple-system, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    touch-action:none;
+  }
+  /* desktop grab-to-navigate affordance — additive to the passive
+     mouse-follow parallax, doesn't apply on touch (no mouse events there) */
+  body.grabbable{ cursor:grab; }
+  body.grabbable.grabbing{ cursor:grabbing; }
+  body.grabbable .arrow{ cursor:pointer; }
+
+  #canvas-wrap{ position:fixed; inset:0; z-index:0; }
+  canvas{ display:block; }
+
+  /* ---- face slides (screen-space, always upright) ---- */
+  #faces{ position:fixed; inset:0; z-index:5; }
+  .face{
+    position:absolute; inset:0;
+    opacity:0; pointer-events:none;
+    transition: transform .6s cubic-bezier(.22,.61,.36,1), opacity .6s ease;
+  }
+  .face.visible{ opacity:1; z-index:2; pointer-events:auto; }
+
+  /* global title overlay — a sibling of #canvas-wrap. The comic-caption
+     "bulle" below is a solid white card, so it no longer needs to blend
+     against the canvas for contrast (a solid white bg with black text is
+     already always readable) — see the note on .f-title. */
+  #global-title{
+    position:fixed; top:0; left:0; right:0; z-index:6;
+    display:flex; justify-content:center;
+    padding: max(24px, calc(env(safe-area-inset-top) + 14px)) 20px 0;
+    pointer-events:none;
+  }
+  /* the "bulle de BD": a white card with a black hand-drawn-ish border —
+     each corner gets a different radius so it reads as sketched rather
+     than a perfect CSS rounded rect, plus a hard (unblurred) offset
+     shadow and a slight permanent tilt for that pasted-on-the-page feel */
+  #global-title .bubble{
+    background:#ffffff;
+    border:3px solid #000000;
+    border-radius: 26px 34px 22px 36px / 32px 20px 38px 24px;
+    box-shadow: 7px 7px 0 0 #000000;
+    padding: 20px 26px 24px;
+    max-width: min(90vw, 620px);
+    display:flex; flex-direction:column; align-items:center; text-align:center;
+    transform: translateY(16px) rotate(-1.1deg);
+    opacity:0;
+    transition:opacity .5s ease, transform .5s cubic-bezier(.22,.61,.36,1);
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px; letter-spacing:0.3em; text-transform:uppercase;
+    color:#3a3a3a; margin-bottom:10px;
+    opacity:0;
+    transition:opacity .4s ease;
+  }
+  .f-title{
+    /* modern manga/BD display face — bold, condensed, high-impact, reads
+       well small on mobile where most visitors will actually see it */
+    font-family:'Dela Gothic One', 'IBM Plex Mono', monospace;
+    font-weight:400;
+    text-transform:uppercase;
+    font-size:clamp(46px, 15vw, 112px);
+    line-height:0.92;
+    color:#000000;
+    margin:0;
+    opacity:0;
+    transition:opacity .4s ease;
+    transition-delay:.05s;
+  }
+  .subtitle{
+    /* comic dialogue lettering — Comic Neue is the clean modern take on
+       classic comic-book speech-bubble type, distinct from the bold
+       poster energy of the title font above */
+    font-family:'Comic Neue', 'IBM Plex Sans', -apple-system, Helvetica, Arial, sans-serif;
+    font-weight:700;
+    font-size:clamp(14px, 3.6vw, 17px);
+    line-height:1.45; color:#3a3a3a;
+    max-width:32ch; margin:14px 0 0;
+    opacity:0;
+    transition:opacity .4s ease;
+    transition-delay:.1s;
+  }
+  #global-title.content-in .bubble{   opacity:1; transform:translateY(0) rotate(-1.1deg); }
+  #global-title.content-in .eyebrow{  opacity:1; }
+  #global-title.content-in .f-title{  opacity:1; }
+  #global-title.content-in .subtitle{ opacity:1; }
+
+  /* the case itself — the drawing now fills the whole face */
+  .drawing-half{
+    position:absolute; inset:0; z-index:1;
+    overflow:hidden;
+  }
+  .drawing-layers{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+  }
+  .drawing-layers .layer{
+    position:absolute; inset:0;
+    opacity:0;
+    transition:opacity .2s ease;
+  }
+  .drawing-layers .layer-inner{
+    width:100%; height:100%;
+    /* 2D translate only now — the rotateX/rotateY 3D tilt was cut: a 3D
+       transform forces the browser into full perspective-correct
+       recompositing every frame, categorically more expensive than a
+       flat translate, even fully decoupled from the filter/blend below.
+       This was the next-biggest cost after the transform/filter split. */
+    transform: translate3d(var(--mx,0px), var(--my,0px), 0);
+    will-change: transform;
+  }
+  .drawing-layers .layer-art{
+    position:relative;
+    width:100%; height:100%;
+    background-image: var(--layer-src);
+    background-size:cover;
+    /* crop anchor point — tweak this one value if drawings still get
+       cut off on mobile portrait; the desktop counterpart is the
+       --layer-pos-desktop rule just below */
+    background-position:center top;
+    background-repeat:no-repeat;
+    /* forces its own compositing layer, independent from .layer-inner's
+       continuously-updating transform above — without this, some
+       browsers still bundle the two into one recomposited unit instead
+       of truly caching this element's (blended) output as a separate,
+       reusable texture */
+    transform: translateZ(0);
+  }
+  /* hidden by default — only the 2 FRONT layers below turn it on. Costs
+     nothing on every other layer/face. */
+  .drawing-layers .layer-shadow{ display:none; }
+  /* ---- FRONT face depth dressing: hard-edged cast shadow + simulated
+     light on the 2 closest layers only (the 2 background ones stay
+     plain — they read as backdrop anyway, so the effect there was cost
+     without much visible payoff). This runs desktop-only already (see
+     isDesktop in JS — mobile never executes any of this), so all of the
+     budget below is purely a desktop-polish cost, trimmed to what's
+     actually worth it.
+
+     Shadow technique, 2nd rewrite: filter:drop-shadow() (blur-based) is
+     replaced entirely — blur is expensive at the moment it's generated
+     even when the result is later cached, and some browsers were still
+     visibly re-blurring it during the live parallax drag. .layer-shadow
+     is a plain duplicate of the same art, background-position identical
+     to .layer-art (same crop, same alignment), tinted solid black via
+     filter:brightness(0) — a near-free filter, nothing like blur's cost
+     — offset a few pixels via transform, and NOT further transformed
+     per frame (it inherits its parent .layer-inner's translate along
+     with .layer-art, but has no animation of its own). Hard edge
+     instead of soft, but that reads as a deliberate flat BD/manga
+     shadow rather than a compromise.
+
+     Light technique unchanged from the previous pass: background-blend-
+     mode blends the art and a gradient within one ordinary paint step,
+     no separate element/isolated group/mask needed.
+     Scoped to FRONT only for now — trivial to lift the face selector
+     once this look is approved. ---- */
+  .face[data-face="FRONT"] .drawing-layers .layer[data-depth="95"] .layer-shadow{
+    display:block;
+    position:absolute; inset:0;
+    background-image: var(--layer-src);
+    background-size:cover;
+    background-position:center top;
+    background-repeat:no-repeat;
+    filter: brightness(0);
+    opacity:.4;
+    transform: translate3d(7px, 10px, 0);
+  }
+  .face[data-face="FRONT"] .drawing-layers .layer[data-depth="65"] .layer-shadow{
+    display:block;
+    position:absolute; inset:0;
+    background-image: var(--layer-src);
+    background-size:cover;
+    background-position:center top;
+    background-repeat:no-repeat;
+    filter: brightness(0);
+    opacity:.3;
+    transform: translate3d(5px, 7px, 0);
+  }
+  .face[data-face="FRONT"] .drawing-layers .layer[data-depth="95"] .layer-art{
+    background-image: var(--layer-src), radial-gradient(circle at 28% 18%, rgba(255,255,255,.55), transparent 62%);
+    background-blend-mode: normal, soft-light;
+    background-size: cover, cover;
+    background-position: center top, center top;
+    background-repeat: no-repeat, no-repeat;
+    /* clip the whole blended result (art + light) to the art's own
+       alpha silhouette — the gradient itself has no shape of its own,
+       it's a plain fill that spans the full box, so wherever the art is
+       transparent, "normal" blend just lets it show through unmasked.
+       That's the same leak as before, reintroduced when mix-blend-mode
+       + mask on a separate element got replaced with the cheaper
+       background-blend-mode — mask still needed, just applied once here
+       instead of on a whole extra element+isolated blend group. */
+    -webkit-mask-image: var(--layer-src); mask-image: var(--layer-src);
+    -webkit-mask-mode: alpha; mask-mode: alpha;
+    -webkit-mask-size: cover; mask-size: cover;
+    -webkit-mask-position: center top; mask-position: center top;
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  }
+  .face[data-face="FRONT"] .drawing-layers .layer[data-depth="65"] .layer-art{
+    background-image: var(--layer-src), radial-gradient(circle at 28% 18%, rgba(255,255,255,.4), transparent 62%);
+    background-blend-mode: normal, soft-light;
+    background-size: cover, cover;
+    background-position: center top, center top;
+    background-repeat: no-repeat, no-repeat;
+    -webkit-mask-image: var(--layer-src); mask-image: var(--layer-src);
+    -webkit-mask-mode: alpha; mask-mode: alpha;
+    -webkit-mask-size: cover; mask-size: cover;
+    -webkit-mask-position: center top; mask-position: center top;
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  }
+  @media (min-aspect-ratio: 1/1){
+    .face[data-face="FRONT"] .drawing-layers .layer[data-depth="95"] .layer-art,
+    .face[data-face="FRONT"] .drawing-layers .layer[data-depth="65"] .layer-art{
+      background-position: center 30%, center 30%;
+      -webkit-mask-position: center 30%; mask-position: center 30%;
+    }
+    .face[data-face="FRONT"] .drawing-layers .layer[data-depth="95"] .layer-shadow,
+    .face[data-face="FRONT"] .drawing-layers .layer[data-depth="65"] .layer-shadow{
+      background-position: center 30%;
+    }
+  }
+  /* on a wide/short viewport (laptop-ish), "cover" stretches the same
+     portrait image much taller than the container, so anchoring at the
+     very top leaves mostly empty canvas visible and crops the drawing
+     out the bottom — shifting the anchor down brings it back into
+     frame. Single tunable value: adjust the 30% if it's still off. */
+  @media (min-aspect-ratio: 1/1){
+    .drawing-layers .layer-art{
+      background-position:center 30%;
+    }
+  }
+  .face.content-in .drawing-layers .layer{ opacity:1; }
+
+  /* ---- directional hints (always available now) ---- */
+  .arrow{
+    position:fixed; z-index:12;
+    font-family:'IBM Plex Mono', monospace; font-size:14px; color:var(--dim);
+    opacity:0.75; pointer-events:auto; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .arrow.up    { top: max(16px, env(safe-area-inset-top));    left:50%; transform:translateX(-50%); }
+  .arrow.down  { bottom: max(16px, env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); }
+  .arrow.left  { left: max(10px, env(safe-area-inset-left));  top:50%; transform:translateY(-50%); }
+  .arrow.right { right: max(10px, env(safe-area-inset-right)); top:50%; transform:translateY(-50%); }
+
+  .hint{
+    position:fixed; bottom: max(46px, calc(env(safe-area-inset-bottom) + 28px));
+    left:0; right:0; z-index:10; text-align:center; pointer-events:none;
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.16em;
+    text-transform:uppercase; color:var(--dim);
+    transition:opacity .6s ease;
+  }
+  .hint.hidden{ opacity:0; }
+</style>
+</head>
+<body>
+
+<div id="canvas-wrap"></div>
+
+<!-- global title overlay: a direct sibling of #canvas-wrap (not nested
+     inside #faces/.face) so mix-blend-mode on the title can actually
+     composite against the WebGL canvas — see CSS comment above #global-title -->
+<div id="global-title">
+  <div class="bubble">
+    <div class="eyebrow" id="gt-eyebrow"></div>
+    <h1 class="f-title" id="gt-title"></h1>
+    <p class="subtitle" id="gt-subtitle"></p>
+  </div>
+</div>
+
+<div id="faces">
+  <div class="face" data-face="FRONT">
+    <div class="drawing-half"><div class="drawing-layers" data-drawing></div></div>
+  </div>
+  <div class="face" data-face="RIGHT">
+    <div class="drawing-half"><div class="drawing-layers" data-drawing></div></div>
+  </div>
+  <div class="face" data-face="BACK">
+    <div class="drawing-half"><div class="drawing-layers" data-drawing></div></div>
+  </div>
+  <div class="face" data-face="LEFT">
+    <div class="drawing-half"><div class="drawing-layers" data-drawing></div></div>
+  </div>
+  <div class="face" data-face="TOP">
+    <div class="drawing-half"><div class="drawing-layers" data-drawing></div></div>
+  </div>
+  <div class="face" data-face="BOTTOM">
+    <div class="drawing-half"><div class="drawing-layers" data-drawing></div></div>
+  </div>
+
+</div>
+
+<div class="arrow up">↑</div>
+<div class="arrow down">↓</div>
+<div class="arrow left">←</div>
+<div class="arrow right">→</div>
+
+<div class="hint" id="hint">Glissez — haut, bas, gauche, droite</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* =========================================================
+   Real rolling-cube navigation: no dead ends, every face
+   has all four directions available, always. We track the
+   cube's actual orientation (a quaternion) and roll it by
+   90° world-axis steps. The face currently pointing toward
+   the camera is derived from that orientation — not from a
+   hand-made graph — so it behaves like a real cube.
+   ========================================================= */
+const ROT = Math.PI/2;
+const AXIS_X = new THREE.Vector3(1,0,0);
+const AXIS_Y = new THREE.Vector3(0,1,0);
+
+const LOCAL_AXES = [
+  { v:new THREE.Vector3(0,0,1),  label:'FRONT'  },
+  { v:new THREE.Vector3(0,0,-1), label:'BACK'   },
+  { v:new THREE.Vector3(1,0,0),  label:'RIGHT'  },
+  { v:new THREE.Vector3(-1,0,0), label:'LEFT'   },
+  { v:new THREE.Vector3(0,1,0),  label:'TOP'    },
+  { v:new THREE.Vector3(0,-1,0), label:'BOTTOM' },
+];
+
+function frontFaceFromQuat(q){
+  let best = 'FRONT', bestDot = -Infinity;
+  for (const ax of LOCAL_AXES){
+    const w = ax.v.clone().applyQuaternion(q);
+    if (w.z > bestDot){ bestDot = w.z; best = ax.label; }
+  }
+  return best;
+}
+
+const OUT = {
+  up:    'translateY(100%)',
+  down:  'translateY(-100%)',
+  left:  'translateX(100%)',
+  right: 'translateX(-100%)',
+};
+const IN_START = {
+  up:    'translateY(-100%)',
+  down:  'translateY(100%)',
+  left:  'translateX(-100%)',
+  right: 'translateX(100%)',
+};
+
+/* ================= DOM refs ================= */
+const faceEls = {};
+document.querySelectorAll('.face').forEach(el => faceEls[el.dataset.face] = el);
+const hintEl = document.getElementById('hint');
+const facesWrap = document.getElementById('faces');
+
+/* ================= global title text ================= */
+// eyebrow / title / subtitle per face — the DOM only ever holds one copy
+// of these now (#global-title), swapped on navigation, so the title can
+// live outside #faces (see the CSS comment on #global-title for why).
+const FACE_TEXT = {
+  FRONT:  { eyebrow: 'Le blog de val',       title: 'Val',                subtitle: 'Développeur créatif — 3D, front-end, interactions.' },
+  RIGHT:  { eyebrow: 'Front-end',       title: 'UI/UX', subtitle: 'SvelteKit, WordPress / Nicepage, CSS sans à-coups, sites multilingues.' },
+  BACK:   { eyebrow: '3D & interactif', title: 'Web', subtitle: 'Three.js, viewers GLB, CV holographique, mini-jeux web.' },
+  LEFT:   { eyebrow: 'Outils',          title: 'Art',      subtitle: "Python, Next.js / Supabase / Vercel, plannings d'équipe." },
+  TOP:    { eyebrow: 'Projets',         title: '3D',       subtitle: 'AS7 Park · GRG Group · CV 3D holographique · NawStar' },
+  BOTTOM: { eyebrow: 'Contact',         title: 'Projets',          subtitle: "Continuez à glisser dans n'importe quelle direction." },
+};
+const globalTitleEl = document.getElementById('global-title');
+const gtEyebrow  = document.getElementById('gt-eyebrow');
+const gtTitle    = document.getElementById('gt-title');
+const gtSubtitle = document.getElementById('gt-subtitle');
+function setGlobalTitleText(faceKey){
+  const t = FACE_TEXT[faceKey] || FACE_TEXT.FRONT;
+  gtEyebrow.textContent  = t.eyebrow;
+  gtTitle.textContent    = t.title;
+  gtSubtitle.textContent = t.subtitle;
+}
+
+/* =========================================================================
+   ============================  CUBE_CONFIG  =============================
+   =========================================================================
+   THE ONLY THING TO EDIT. One entry per cube face (FRONT / BACK / LEFT /
+   RIGHT / TOP / BOTTOM). Just type a filename — the image must sit next
+   to this HTML file (same folder, "root"). Leave a string empty ('') for
+   "no image":
+     - empty fond   -> that face of the cube stays the plain halftone/BD
+                       shader (no texture), nothing breaks.
+     - empty layer  -> that parallax layer is simply not drawn (transparent).
+
+   fond    : one image, mapped flat onto that face of the 3D cube itself.
+   layers  : exactly 4 images for the parallax stack shown over the text,
+             ordered foreground -> background (layers[0] moves the most
+             under the mouse, layers[3] the least).
+   ========================================================================= */
+const CUBE_CONFIG = {
+  FRONT:  { fond: '', layers: ['front-1.webp', 'front-2.webp', 'front-3.webp', 'front-4.webp'] },
+  RIGHT:  { fond: 'right-fond.webp', layers: ['right-1.webp', '', 'right-3.webp', ''] },
+  BACK:   { fond: '', layers: ['', '', '', ''] },
+  LEFT:   { fond: '', layers: ['', '', '', ''] },
+  TOP:    { fond: '', layers: ['', '', '', ''] },
+  BOTTOM: { fond: '', layers: ['', '', '', ''] },
+};
+/* ========================================================================= */
+
+// sanity check: every face must reserve exactly 4 layer slots (empty
+// strings are fine, a missing/short array is not) — catches a stray
+// comma or a forgotten entry immediately in the console instead of
+// silently dropping a layer
+Object.entries(CUBE_CONFIG).forEach(([faceKey, cfg]) => {
+  if (!cfg || !Array.isArray(cfg.layers) || cfg.layers.length !== 4) {
+    console.warn(`[CUBE_CONFIG] ${faceKey}: expected exactly 4 layers, got`, cfg && cfg.layers);
+  }
+});
+
+/* ================= parallax drawing layers =================
+   Builds the 4-layer DOM stack for a face from CUBE_CONFIG[faceKey].layers.
+   Revealed via the same .content-in cascade as the text, in lockstep
+   with the face's own slide (see navigate()).
+   ==================================================================== */
+const DEPTHS = [
+  { depth:18, delay:0.05, layerIndex:3 },
+  { depth:40, delay:0.13, layerIndex:2 },
+  { depth:65, delay:0.21, layerIndex:1 },
+  { depth:95, delay:0.29, layerIndex:0 },
+];
+function buildDrawing(faceKey){
+  const layers = (CUBE_CONFIG[faceKey] && CUBE_CONFIG[faceKey].layers) || [];
+  let html = '';
+  DEPTHS.forEach(d => {
+    const src = layers[d.layerIndex];
+    // --layer-src feeds .layer-art's background-image via CSS (var()),
+    // rather than setting background-image directly inline — that way
+    // the FRONT depth rules in CSS can still add a second background
+    // layer (the light gradient, via background-blend-mode) without an
+    // inline style fighting them on specificity.
+    const bg = src ? ` style="--layer-src:url('${src}')"` : '';
+    // .layer-shadow is a plain duplicate of the same art, tinted solid
+    // black via brightness(0) (a cheap filter — nothing like the blur
+    // cost of drop-shadow) and offset behind .layer-art via transform.
+    // Still respects the art's own alpha silhouette, just with a hard
+    // edge instead of a soft blurred one — which reads as a deliberate
+    // flat BD/manga shadow rather than a compromise.
+    html += `<div class="layer" data-depth="${d.depth}" data-delay="${d.delay}"><div class="layer-inner"><div class="layer-shadow"${bg}></div><div class="layer-art"${bg}></div></div></div>`;
+  });
+  return html;
+}
+document.querySelectorAll('[data-drawing]').forEach(slot => {
+  const faceKey = slot.closest('.face').dataset.face;
+  slot.innerHTML = buildDrawing(faceKey);
+});
+
+// cache each face's 4 .layer-inner elements (+ their depth) once, up
+// front — updateLayerParallax() runs every animation frame, so doing
+// querySelectorAll/querySelector from scratch there (as it did before)
+// meant 8+ DOM queries, 60 times a second, for no reason: the layers
+// never change after this point, only which face is "current" does.
+const faceLayerInners = {};
+Object.keys(faceEls).forEach(faceKey=>{
+  faceLayerInners[faceKey] = Array.from(
+    faceEls[faceKey].querySelectorAll('.drawing-layers .layer')
+  ).map(layer => ({
+    depth: parseFloat(layer.dataset.depth || '20'),
+    inner: layer.querySelector('.layer-inner'),
+  })).filter(l => l.inner);
+});
+
+
+let current = 'FRONT';
+faceEls[current].classList.add('visible');
+faceEls[current].style.transform = 'translate(0,0)';
+setGlobalTitleText(current);
+requestAnimationFrame(()=> {
+  faceEls[current].classList.add('content-in');
+  globalTitleEl.classList.add('content-in');
+});
+
+let locked = false;
+// 0..1 ramp, eased up from 0 each time a face becomes current so the
+// parallax offset fades in smoothly instead of snapping to the current
+// mouse position the instant the slide-in transition finishes. Declared
+// here (top-level, before navigate()) rather than down by the mouse
+// tracking code so it's always initialized even if something later in
+// setup (e.g. WebGL) throws before reaching that point.
+let parallaxIntensity = 0;
+let _parallaxFrameToggle = false; // halves the parallax update rate, see animate()
+const targetQuat = new THREE.Quaternion();
+
+const LAYER_AXIS = { up:'Y', down:'Y', left:'X', right:'X' };
+// same sign as IN_START/OUT below — layers move in lockstep with the face
+const ENTER_SIGN = { up:-1, down:1, left:-1, right:1 }; // mirrors IN_START
+const EXIT_SIGN  = { up:1,  down:-1, left:1,  right:-1 }; // mirrors OUT
+
+function layerTransition(delay){
+  return `transform .68s cubic-bezier(.22,.61,.36,1) ${delay}s, opacity .45s ease ${delay}s`;
+}
+
+function layerTranslate(dir, sign, depth){
+  const axis = LAYER_AXIS[dir];
+  const val = (sign * depth) + '%';
+  return axis === 'X' ? `translate(${val},0)` : `translate(0,${val})`;
+}
+
+// place a face's layers at their start position, instantly (no transition) —
+// used right before the entrance animation begins
+function primeLayersAtStart(faceEl, dir){
+  faceEl.querySelectorAll('.drawing-layers .layer').forEach(layer=>{
+    layer.style.transition = 'none';
+    const depth = parseFloat(layer.dataset.depth || '20');
+    layer.style.transform = layerTranslate(dir, ENTER_SIGN[dir], depth);
+  });
+}
+
+// animate a face's layers to their resting position (translate(0,0)),
+// each with its own delay — background arrives first, foreground last
+function animateLayersIn(faceEl){
+  faceEl.querySelectorAll('.drawing-layers .layer').forEach(layer=>{
+    const delay = parseFloat(layer.dataset.delay || '0');
+    layer.style.transition = layerTransition(delay);
+    layer.style.transform = 'translate(0,0)';
+  });
+}
+
+// animate a face's layers out toward the exit side, same per-layer delay logic
+function animateLayersOut(faceEl, dir){
+  faceEl.querySelectorAll('.drawing-layers .layer').forEach(layer=>{
+    const delay = parseFloat(layer.dataset.delay || '0');
+    layer.style.transition = layerTransition(delay);
+    const depth = parseFloat(layer.dataset.depth || '20');
+    layer.style.transform = layerTranslate(dir, EXIT_SIGN[dir], depth);
+  });
+}
+
+function resetLayerTransforms(faceEl){
+  faceEl.querySelectorAll('.drawing-layers .layer').forEach(layer=>{
+    layer.style.transition = 'none';
+    layer.style.transform = '';
+  });
+}
+
+function navigate(dir){
+  if (locked) return;
+
+  const axis  = (dir === 'up' || dir === 'down') ? AXIS_X : AXIS_Y;
+  const angle = (dir === 'down' || dir === 'right') ? -ROT : ROT;
+  const delta = new THREE.Quaternion().setFromAxisAngle(axis, angle);
+  targetQuat.premultiply(delta);
+
+  const next = frontFaceFromQuat(targetQuat);
+  locked = true;
+  hintEl.classList.add('hidden');
+
+  // the title now lives outside #faces as a single shared element, so it
+  // can't crossfade two independent copies like the slides do — fade the
+  // old text out first, swap it once it's gone, then fade the new text in
+  globalTitleEl.classList.remove('content-in');
+  setTimeout(()=>{
+    setGlobalTitleText(next);
+    globalTitleEl.classList.add('content-in');
+  }, 500);
+
+  const curEl = faceEls[current];
+  const nxtEl = faceEls[next];
+
+  primeLayersAtStart(nxtEl, dir);
+
+  nxtEl.classList.remove('content-in');
+  nxtEl.style.transition = 'none';
+  nxtEl.style.transform = IN_START[dir];
+  nxtEl.classList.add('visible');
+  nxtEl.style.zIndex = 3;
+  curEl.style.zIndex = 2;
+
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      const ease = 'transform .62s cubic-bezier(.22,.61,.36,1), opacity .62s ease';
+      nxtEl.style.transition = ease;
+      curEl.style.transition = ease;
+      nxtEl.style.transform = 'translate(0,0)';
+      curEl.style.transform = OUT[dir];
+      curEl.style.opacity = '0';
+      nxtEl.classList.add('content-in');
+      animateLayersIn(nxtEl);
+      animateLayersOut(curEl, dir);
+    });
+  });
+
+  setTimeout(()=>{
+    curEl.classList.remove('visible','content-in');
+    curEl.style.opacity = '1';
+    curEl.style.zIndex = 1;
+    resetLayerTransforms(curEl);
+    current = next;
+    parallaxIntensity = 0; // ease the new face's parallax in from zero
+                            // instead of snapping straight to whatever
+                            // offset the current mouse position implies
+    locked = false;
+  }, 1000);
+}
+
+/* ================= input: swipe / wheel / keys ================= */
+const THRESH = 42;
+let sx=0, sy=0, tracking=false;
+
+window.addEventListener('touchstart', (e)=>{
+  tracking = true;
+  sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+}, {passive:true});
+
+window.addEventListener('touchmove', (e)=>{
+  e.preventDefault();
+}, {passive:false});
+
+window.addEventListener('touchend', (e)=>{
+  if (!tracking) return;
+  tracking = false;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - sx, dy = t.clientY - sy;
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  if (Math.max(adx, ady) < THRESH) return;
+  if (adx > ady) navigate(dx < 0 ? 'right' : 'left');
+  else           navigate(dy < 0 ? 'down'  : 'up');
+}, {passive:true});
+
+let wheelLock = false;
+window.addEventListener('wheel', (e)=>{
+  e.preventDefault();
+  if (wheelLock) return;
+  const adx = Math.abs(e.deltaX), ady = Math.abs(e.deltaY);
+  if (Math.max(adx, ady) < 8) return;
+  wheelLock = true;
+  setTimeout(()=> wheelLock = false, 550);
+  if (adx > ady) navigate(e.deltaX > 0 ? 'right' : 'left');
+  else           navigate(e.deltaY > 0 ? 'down'  : 'up');
+}, {passive:false});
+
+window.addEventListener('keydown', (e)=>{
+  const map = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
+  if (map[e.key]){ e.preventDefault(); navigate(map[e.key]); }
+});
+
+document.querySelectorAll('.arrow').forEach(el=>{
+  const dir = ['up','down','left','right'].find(d => el.classList.contains(d));
+  el.addEventListener('click', ()=> navigate(dir));
+});
+
+/* ================= Three.js: single cube, tech shader, background only ================= */
+const canvasWrap = document.getElementById('canvas-wrap');
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+canvasWrap.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+scene.fog = new THREE.Fog(0x000000, 6, 18);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+
+const CUBE_SIZE = 2.3;
+const geo = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
+
+/* manga/BD shader: white "paper" faces, halftone screentone dots for
+   shading (density driven by a slow-moving ink wash + edge fresnel),
+   strict black & white only, unlit on purpose */
+const cubeMat = new THREE.ShaderMaterial({
+  transparent:false,
+  side: THREE.DoubleSide,
+  uniforms:{ uTime:{ value:0 } },
+  vertexShader:`
+    varying vec3 vNormal;
+    varying vec3 vViewPos;
+    varying vec2 vUv;
+    void main(){
+      vUv = uv;
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      vViewPos = -mvPosition.xyz;
+      vNormal = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix * mvPosition;
+    }
+  `,
+  fragmentShader:`
+    uniform float uTime;
+    varying vec3 vNormal;
+    varying vec3 vViewPos;
+    varying vec2 vUv;
+
+    void main(){
+      vec3 viewDir = normalize(vViewPos);
+      float fresnel = pow(1.0 - clamp(dot(normalize(vNormal), viewDir), 0.0, 1.0), 2.4);
+
+      // slow travelling ink wash — adds shade as it sweeps the panel
+      float wash = 0.5 + 0.5*sin(vUv.y*3.0 - uTime*0.35 + vUv.x*1.5);
+      wash = smoothstep(0.35, 0.95, wash);
+
+      float shade = clamp(fresnel*0.85 + wash*0.35, 0.0, 1.0);
+
+      // halftone screentone: dot radius grows with local shade
+      vec2 grid = fract(vUv * 26.0) - 0.5;
+      float dist = length(grid);
+      float dotRadius = shade * 0.62;
+      float dot = 1.0 - smoothstep(dotRadius - 0.05, dotRadius, dist);
+
+      vec3 paper = vec3(1.0);
+      vec3 ink = vec3(0.0);
+      vec3 color = mix(paper, ink, dot);
+
+      gl_FragColor = vec4(color, 1.0);
+    }
+  `,
+});
+
+// per-face materials: BoxGeometry's default UV groups are ordered
+// [+x, -x, +y, -y, +z, -z], which is exactly RIGHT/LEFT/TOP/BOTTOM/FRONT/BACK
+// (see LOCAL_AXES above) — faces with a "fond" get a plain textured
+// material, everything else keeps the shared halftone shader
+const MATERIAL_FACE_ORDER = ['RIGHT','LEFT','TOP','BOTTOM','FRONT','BACK'];
+const textureLoader = new THREE.TextureLoader();
+const cubeMaterials = MATERIAL_FACE_ORDER.map(faceKey => {
+  const fondPath = CUBE_CONFIG[faceKey] && CUBE_CONFIG[faceKey].fond;
+  if (!fondPath) return cubeMat; // no fond configured -> plain halftone shader
+  const tex = textureLoader.load(fondPath);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.MeshBasicMaterial({ map: tex });
+});
+
+const cube = new THREE.Mesh(geo, cubeMaterials);
+scene.add(cube);
+
+// thick black border via the inverted-hull outline trick: a slightly
+// enlarged duplicate mesh, black, rendered back-face-only — GL line
+// widths are unreliable across browsers, this reads as a bold BD
+// panel border reliably everywhere
+const outlineMat = new THREE.MeshBasicMaterial({ color:0x000000, side:THREE.BackSide });
+const outline = new THREE.Mesh(geo, outlineMat);
+outline.scale.setScalar(1.06);
+cube.add(outline);
+
+/* renderer-specific responsiveness: recompute size, aspect and camera fit
+   independently from the DOM layout, on every resize / orientation change */
+function fitScene(){
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+
+  // fit by height only — on narrow/portrait screens the cube is allowed
+  // to bleed past the left/right edges rather than shrinking to stay
+  // fully contained; it's a background element, not a framed object
+  const margin = 1.35;
+  const vFov = camera.fov * Math.PI/180;
+  const distForH = (CUBE_SIZE*margin/2) / Math.tan(vFov/2);
+
+  camera.position.set(0, 0, distForH);
+  camera.lookAt(0,0,0);
+  camera.updateProjectionMatrix();
+}
+fitScene();
+
+window.addEventListener('resize', fitScene);
+window.addEventListener('orientationchange', fitScene);
+if (window.visualViewport){
+  window.visualViewport.addEventListener('resize', fitScene);
+}
+
+const clock = new THREE.Clock();
+const _q = new THREE.Quaternion();
+const _e = new THREE.Euler();
+
+// mouse-follow parallax on the drawing layers only — desktop (fine
+// pointer) exclusively, so touch/mobile stays perfectly smooth with
+// zero extra event interference, as specified
+const isDesktop = window.matchMedia('(pointer: fine)').matches;
+let mouseX = 0, mouseY = 0;
+if (isDesktop){
+  window.addEventListener('mousemove', (e)=>{
+    mouseX = (e.clientX / window.innerWidth)  * 2 - 1;
+    mouseY = (e.clientY / window.innerHeight) * 2 - 1;
+  });
+
+  // click-and-drag navigation, additive to the passive mouse-follow
+  // parallax above — same swipe threshold/logic as the touch version,
+  // just driven by mousedown/mouseup instead of touchstart/touchend.
+  // The grab/grabbing cursor is the affordance that this is draggable.
+  document.body.classList.add('grabbable');
+  let dragging = false, dsx = 0, dsy = 0;
+  window.addEventListener('mousedown', (e)=>{
+    dragging = true;
+    dsx = e.clientX; dsy = e.clientY;
+    document.body.classList.add('grabbing');
+  });
+  window.addEventListener('mouseup', (e)=>{
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove('grabbing');
+    const dx = e.clientX - dsx, dy = e.clientY - dsy;
+    const adx = Math.abs(dx), ady = Math.abs(dy);
+    if (Math.max(adx, ady) < THRESH) return;
+    if (adx > ady) navigate(dx < 0 ? 'right' : 'left');
+    else           navigate(dy < 0 ? 'down'  : 'up');
+  });
+  window.addEventListener('mouseleave', ()=>{
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove('grabbing');
+  });
+}
+
+let _lastParallaxMX = null, _lastParallaxMY = null; // dirty-check state
+function updateLayerParallax(){
+  if (!isDesktop) return;
+  const converged = parallaxIntensity >= 0.999;
+  // skip all DOM writes once the ease-in has converged and the mouse
+  // hasn't actually moved since the last frame — with filter+blend on
+  // these layers, every write forces the browser to redo real work, so
+  // re-setting the exact same offset 60x/sec for a still mouse was pure
+  // waste
+  if (converged && mouseX === _lastParallaxMX && mouseY === _lastParallaxMY) return;
+  _lastParallaxMX = mouseX; _lastParallaxMY = mouseY;
+
+  // ease intensity 0 -> 1 (exponential approach, ~0.4s to settle);
+  // stays at 1 once converged so normal mouse tracking is untouched
+  // 0.22 not 0.12 — this now runs at ~30fps instead of 60fps (see
+  // animate()), so the ease factor is roughly doubled to keep the same
+  // real-time convergence speed (~0.4s) as before
+  parallaxIntensity += (1 - parallaxIntensity) * 0.22;
+  const layers = faceLayerInners[current];
+  if (!layers) return;
+  for (let i = 0; i < layers.length; i++){
+    const { depth, inner } = layers[i];
+    const strength = depth / 95 * parallaxIntensity; // normalize against the largest depth value
+    // translate only now (see the CSS note on .layer-inner for why the
+    // rotateX/rotateY tilt was cut) — no more --mrx/--mry to compute
+    inner.style.setProperty('--mx',  (mouseX * strength * 10) + 'px');
+    inner.style.setProperty('--my',  (mouseY * strength * 10) + 'px');
+  }
+}
+
+function animate(){
+  const t = clock.getElapsedTime();
+  cubeMat.uniforms.uTime.value = t;
+
+  // gentle float, purely decorative
+  cube.position.y = Math.sin(t*0.7) * 0.08;
+
+  // roll target orientation + a small living wobble — mouse never touches the cube
+  _e.setFromQuaternion(targetQuat);
+  _e.x += Math.sin(t*0.3)*0.045;
+  _e.y += Math.sin(t*0.22)*0.055;
+  _e.z += Math.cos(t*0.26)*0.035;
+  _q.setFromEuler(_e);
+  cube.quaternion.slerp(_q, 0.08);
+
+  // the parallax doesn't need 60fps to read as smooth — halving its
+  // update rate halves the remaining JS + style-recalc cost for it
+  // without the cube's own animation (still every frame) looking any
+  // different
+  _parallaxFrameToggle = !_parallaxFrameToggle;
+  if (_parallaxFrameToggle) updateLayerParallax();
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+animate();
+</script>
+</body>
+</html>
