@@ -9,8 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=Dela+Gothic+One&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#000000;
-    --fg:#ffffff;
+    --bg:#ffffff;
+    --fg:#000000;
     --mid:#8a8a8a;
     --dim:#5c5c5c;
     --line:rgba(255,255,255,0.14);
@@ -701,7 +701,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 canvasWrap.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000);
+scene.background = new THREE.Color(0xffffff);
 scene.fog = new THREE.Fog(0x000000, 6, 18);
 
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
@@ -784,6 +784,18 @@ const outlineMat = new THREE.MeshBasicMaterial({ color:0x000000, side:THREE.Back
 const outline = new THREE.Mesh(geo, outlineMat);
 outline.scale.setScalar(1.06);
 cube.add(outline);
+
+// per-face contour: the inverted-hull outline above only draws along the
+// cube's outer silhouette, so when a wobble tilt reveals a second/third
+// face, the seam between two visible faces stays borderless. Drawing the
+// 12 real cube edges on top fixes that — every face keeps its own black
+// contour no matter the angle. Scaled up a hair to avoid z-fighting with
+// the face materials underneath.
+const edgesGeo = new THREE.EdgesGeometry(geo);
+const edgesMat = new THREE.LineBasicMaterial({ color:0x000000 });
+const edges = new THREE.LineSegments(edgesGeo, edgesMat);
+edges.scale.setScalar(1.001);
+cube.add(edges);
 
 /* renderer-specific responsiveness: recompute size, aspect and camera fit
    independently from the DOM layout, on every resize / orientation change */
