@@ -58,6 +58,7 @@
      than a perfect CSS rounded rect, plus a hard (unblurred) offset
      shadow and a slight permanent tilt for that pasted-on-the-page feel */
   #global-title .bubble{
+    position:relative;
     background:#ffffff;
     border:3px solid #000000;
     border-radius: 26px 34px 22px 36px / 32px 20px 38px 24px;
@@ -68,6 +69,28 @@
     transform: translateY(16px) rotate(-1.1deg);
     opacity:0;
     transition:opacity .5s ease, transform .5s cubic-bezier(.22,.61,.36,1);
+  }
+  /* comic tail aimed toward the center of the viewport */
+  #global-title .bubble::before,
+  #global-title .bubble::after{
+    content:'';
+    position:absolute;
+    left:50%;
+    transform:translateX(-50%);
+    width:0; height:0;
+    pointer-events:none;
+  }
+  #global-title .bubble::before{
+    top:calc(100% - 1px);
+    border-left:18px solid transparent;
+    border-right:18px solid transparent;
+    border-top:30px solid #000000;
+  }
+  #global-title .bubble::after{
+    top:calc(100% - 1px);
+    border-left:12px solid transparent;
+    border-right:12px solid transparent;
+    border-top:22px solid #ffffff;
   }
   .eyebrow{
     font-family:'IBM Plex Mono', monospace;
