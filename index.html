@@ -58,6 +58,7 @@
      than a perfect CSS rounded rect, plus a hard (unblurred) offset
      shadow and a slight permanent tilt for that pasted-on-the-page feel */
   #global-title .bubble{
+    position:relative;
     background:#ffffff;
     border:3px solid #000000;
     border-radius: 26px 34px 22px 36px / 32px 20px 38px 24px;
@@ -68,6 +69,28 @@
     transform: translateY(16px) rotate(-1.1deg);
     opacity:0;
     transition:opacity .5s ease, transform .5s cubic-bezier(.22,.61,.36,1);
+  }
+  /* comic tail aimed toward the center of the viewport */
+  #global-title .bubble::before,
+  #global-title .bubble::after{
+    content:'';
+    position:absolute;
+    left:50%;
+    transform:translateX(-50%);
+    width:0; height:0;
+    pointer-events:none;
+  }
+  #global-title .bubble::before{
+    top:calc(100% - 1px);
+    border-left:18px solid transparent;
+    border-right:18px solid transparent;
+    border-top:30px solid #000000;
+  }
+  #global-title .bubble::after{
+    top:calc(100% - 1px);
+    border-left:12px solid transparent;
+    border-right:12px solid transparent;
+    border-top:22px solid #ffffff;
   }
   .eyebrow{
     font-family:'IBM Plex Mono', monospace;
@@ -178,6 +201,8 @@
      no separate element/isolated group/mask needed.
      Scoped to FRONT only for now — trivial to lift the face selector
      once this look is approved. ---- */
+  /* FRONT dynamic shadows disabled for now. Keep this block available if
+     the shadow treatment needs to return on another face later.
   .face[data-face="FRONT"] .drawing-layers .layer[data-depth="95"] .layer-shadow{
     display:block;
     position:absolute; inset:0;
@@ -200,6 +225,7 @@
     opacity:.3;
     transform: translate3d(5px, 7px, 0);
   }
+  */
   .face[data-face="FRONT"] .drawing-layers .layer[data-depth="95"] .layer-art{
     background-image: var(--layer-src), radial-gradient(circle at 28% 18%, rgba(255,255,255,.55), transparent 62%);
     background-blend-mode: normal, soft-light;
@@ -238,10 +264,12 @@
       background-position: center 30%, center 30%;
       -webkit-mask-position: center 30%; mask-position: center 30%;
     }
+    /* FRONT shadow alignment retained for possible future reuse.
     .face[data-face="FRONT"] .drawing-layers .layer[data-depth="95"] .layer-shadow,
     .face[data-face="FRONT"] .drawing-layers .layer[data-depth="65"] .layer-shadow{
       background-position: center 30%;
     }
+    */
   }
   /* on a wide/short viewport (laptop-ish), "cover" stretches the same
      portrait image much taller than the container, so anchoring at the
@@ -381,12 +409,12 @@ const facesWrap = document.getElementById('faces');
 // of these now (#global-title), swapped on navigation, so the title can
 // live outside #faces (see the CSS comment on #global-title for why).
 const FACE_TEXT = {
-  FRONT:  { eyebrow: 'Bienvenue',       title: 'Val',                subtitle: 'Développeur créatif — 3D, front-end, interactions.' },
-  RIGHT:  { eyebrow: 'Front-end',       title: 'Sites & interfaces', subtitle: 'SvelteKit, WordPress / Nicepage, CSS sans à-coups, sites multilingues.' },
-  BACK:   { eyebrow: '3D & interactif', title: 'Mondes interactifs', subtitle: 'Three.js, viewers GLB, CV holographique, mini-jeux web.' },
-  LEFT:   { eyebrow: 'Outils',          title: 'Sous le capot',      subtitle: "Python, Next.js / Supabase / Vercel, plannings d'équipe." },
-  TOP:    { eyebrow: 'Projets',         title: 'Réalisations',       subtitle: 'AS7 Park · GRG Group · CV 3D holographique · NawStar' },
-  BOTTOM: { eyebrow: 'Contact',         title: 'Discutons',          subtitle: "Continuez à glisser dans n'importe quelle direction." },
+  FRONT:  { eyebrow: 'Le blog de val',       title: 'Val',                subtitle: 'Développeur créatif — 3D, front-end, interactions.' },
+  RIGHT:  { eyebrow: 'Front-end',       title: 'UI/UX', subtitle: 'SvelteKit, WordPress / Nicepage, CSS sans à-coups, sites multilingues.' },
+  BACK:   { eyebrow: '3D & interactif', title: 'Web', subtitle: 'Three.js, viewers GLB, CV holographique, mini-jeux web.' },
+  LEFT:   { eyebrow: 'Outils',          title: 'Art',      subtitle: "Python, Next.js / Supabase / Vercel, plannings d'équipe." },
+  TOP:    { eyebrow: 'Projets',         title: '3D',       subtitle: 'AS7 Park · GRG Group · CV 3D holographique · NawStar' },
+  BOTTOM: { eyebrow: 'Contact',         title: 'Projets',          subtitle: "Continuez à glisser dans n'importe quelle direction." },
 };
 const globalTitleEl = document.getElementById('global-title');
 const gtEyebrow  = document.getElementById('gt-eyebrow');
@@ -416,7 +444,7 @@ function setGlobalTitleText(faceKey){
              under the mouse, layers[3] the least).
    ========================================================================= */
 const CUBE_CONFIG = {
-  FRONT:  { fond: '', layers: ['front-1.webp', 'front-2.webp', 'front-3.webp', 'front-4.webp'] },
+  FRONT:  { fond: 'front-fond.webp', layers: ['front-1.webp', 'front-2.webp', 'front-3.webp', 'front-4.webp'] },
   RIGHT:  { fond: 'right-fond.webp', layers: ['right-1.webp', '', 'right-3.webp', ''] },
   BACK:   { fond: '', layers: ['', '', '', ''] },
   LEFT:   { fond: '', layers: ['', '', '', ''] },
