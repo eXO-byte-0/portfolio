@@ -201,6 +201,8 @@
      no separate element/isolated group/mask needed.
      Scoped to FRONT only for now — trivial to lift the face selector
      once this look is approved. ---- */
+  /* FRONT dynamic shadows disabled for now. Keep this block available if
+     the shadow treatment needs to return on another face later.
   .face[data-face="FRONT"] .drawing-layers .layer[data-depth="95"] .layer-shadow{
     display:block;
     position:absolute; inset:0;
@@ -223,6 +225,7 @@
     opacity:.3;
     transform: translate3d(5px, 7px, 0);
   }
+  */
   .face[data-face="FRONT"] .drawing-layers .layer[data-depth="95"] .layer-art{
     background-image: var(--layer-src), radial-gradient(circle at 28% 18%, rgba(255,255,255,.55), transparent 62%);
     background-blend-mode: normal, soft-light;
@@ -261,10 +264,12 @@
       background-position: center 30%, center 30%;
       -webkit-mask-position: center 30%; mask-position: center 30%;
     }
+    /* FRONT shadow alignment retained for possible future reuse.
     .face[data-face="FRONT"] .drawing-layers .layer[data-depth="95"] .layer-shadow,
     .face[data-face="FRONT"] .drawing-layers .layer[data-depth="65"] .layer-shadow{
       background-position: center 30%;
     }
+    */
   }
   /* on a wide/short viewport (laptop-ish), "cover" stretches the same
      portrait image much taller than the container, so anchoring at the
