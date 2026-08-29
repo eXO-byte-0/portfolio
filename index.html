@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>VAL — expériences</title>
+<title>VAL — experiences</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=Dela+Gothic+One&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
@@ -347,7 +347,7 @@
 <div class="arrow left">←</div>
 <div class="arrow right">→</div>
 
-<div class="hint" id="hint">Glissez — haut, bas, gauche, droite</div>
+<div class="hint" id="hint">Swipe — up, down, left, right</div>
 
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js" } }
@@ -409,12 +409,12 @@ const facesWrap = document.getElementById('faces');
 // of these now (#global-title), swapped on navigation, so the title can
 // live outside #faces (see the CSS comment on #global-title for why).
 const FACE_TEXT = {
-  FRONT:  { eyebrow: 'Le blog de Val présente',       title: 'Val',                subtitle: 'Swipe in any direction to explore the portfolio ; enjoy, follow, coment, like, share etc ;)' },
-  RIGHT:  { eyebrow: 'Front-end',       title: 'UI/UX', subtitle: 'SvelteKit, WordPress / Nicepage, CSS sans à-coups, sites multilingues.' },
-  BACK:   { eyebrow: '3D & interactif', title: 'Web', subtitle: 'Three.js, viewers GLB, CV holographique, mini-jeux web.' },
-  LEFT:   { eyebrow: 'Outils',          title: 'Art',      subtitle: "Python, Next.js / Supabase / Vercel, plannings d'équipe." },
-  TOP:    { eyebrow: 'Projets',         title: '3D',       subtitle: 'AS7 Park · GRG Group · CV 3D holographique · NawStar' },
-  BOTTOM: { eyebrow: 'Contact',         title: 'Links',          subtitle: "Continuez à glisser dans n'importe quelle direction." },
+  FRONT:  { eyebrow: "Val's blog presents",       title: 'Val',                subtitle: 'Swipe in any direction to explore the portfolio ; enjoy, follow, comment, like, share etc ;)' },
+  RIGHT:  { eyebrow: 'Front-end Design',       title: 'UI/UX', subtitle: 'SvelteKit, WordPress / Nicepage, CSS/SCSS, multilingual sites and other stuff so obvious I should not waste your time listing them.' },
+  BACK:   { eyebrow: '3D & interactive', title: 'Web', subtitle: 'Three.js, GLB viewers, holographic resume, web mini-games ; a part of me still dream about working on some Game-Design !' },
+  LEFT:   { eyebrow: 'Backend & Tools',          title: 'Stack',      subtitle: "Python, Next.js / Supabase / Vercel, team scheduling." },
+  TOP:    { eyebrow: 'Projects',         title: 'Work',       subtitle: 'AS7 Park · GRG Group · Holographic 3D resume · NawStar' },
+  BOTTOM: { eyebrow: 'See my other current projects',         title: 'Links',          subtitle: "Live demos, repos, and more — swipe to see what else I'm building." },
 };
 const globalTitleEl = document.getElementById('global-title');
 const gtEyebrow  = document.getElementById('gt-eyebrow');
