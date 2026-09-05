@@ -765,11 +765,19 @@ const cubeMat = new THREE.ShaderMaterial({
 // material, everything else keeps the shared halftone shader
 const MATERIAL_FACE_ORDER = ['RIGHT','LEFT','TOP','BOTTOM','FRONT','BACK'];
 const textureLoader = new THREE.TextureLoader();
+const fondTextures = [];
 const cubeMaterials = MATERIAL_FACE_ORDER.map(faceKey => {
   const fondPath = CUBE_CONFIG[faceKey] && CUBE_CONFIG[faceKey].fond;
   if (!fondPath) return cubeMat; // no fond configured -> plain halftone shader
   const tex = textureLoader.load(fondPath);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.center.set(0.5, 0.5);
+  fondTextures.push({
+    faceKey,
+    texture: tex,
+    localNormal: LOCAL_AXES.find(axis => axis.label === faceKey).v.clone(),
+    localUp: new THREE.Vector3(0, 1, 0),
+  });
   return new THREE.MeshBasicMaterial({ map: tex });
 });
 
@@ -807,7 +815,7 @@ function fitScene(){
   // fit by height only — on narrow/portrait screens the cube is allowed
   // to bleed past the left/right edges rather than shrinking to stay
   // fully contained; it's a background element, not a framed object
-  const margin = 1.35;
+  const margin = 1.55;
   const vFov = camera.fov * Math.PI/180;
   const distForH = (CUBE_SIZE*margin/2) / Math.tan(vFov/2);
 
@@ -826,6 +834,30 @@ if (window.visualViewport){
 const clock = new THREE.Clock();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
+const _fondNormal = new THREE.Vector3();
+const _fondImageUp = new THREE.Vector3();
+const _fondReferenceUp = new THREE.Vector3();
+const _fondCross = new THREE.Vector3();
+
+// Counter-rotate fond maps around their face normal so their image stays
+// upright relative to the viewport while the cube rolls underneath them.
+function updateFondOrientations(){
+  for (const fond of fondTextures){
+    _fondNormal.copy(fond.localNormal).applyQuaternion(cube.quaternion).normalize();
+    _fondImageUp.copy(fond.localUp).applyQuaternion(cube.quaternion).normalize();
+    _fondReferenceUp.set(0, 1, 0).projectOnPlane(_fondNormal);
+
+    // A face pointing straight up or down has no unique screen-up vector;
+    // leave its last stable angle until it becomes visible again.
+    if (_fondReferenceUp.lengthSq() < 0.0001) continue;
+    _fondReferenceUp.normalize();
+    const angle = Math.atan2(
+      _fondNormal.dot(_fondCross.crossVectors(_fondImageUp, _fondReferenceUp)),
+      _fondImageUp.dot(_fondReferenceUp),
+    );
+    fond.texture.rotation = angle;
+  }
+}
 
 // mouse-follow parallax on the drawing layers only — desktop (fine
 // pointer) exclusively, so touch/mobile stays perfectly smooth with
@@ -910,6 +942,7 @@ function animate(){
   _e.z += Math.cos(t*0.26)*0.035;
   _q.setFromEuler(_e);
   cube.quaternion.slerp(_q, 0.08);
+  updateFondOrientations();
 
   // the parallax doesn't need 60fps to read as smooth — halving its
   // update rate halves the remaining JS + style-recalc cost for it
