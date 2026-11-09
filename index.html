@@ -2,959 +2,734 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>VAL — experiences</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Val Andrieu — the cube</title>
+<meta name="description" content="Val Andrieu — illustrator, graphic designer, UI/UX & 2D/3D artist. A portfolio you swipe like a comic.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=Dela+Gothic+One&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400&family=Roboto+Condensed:ital,wght@0,400;0,700;0,900;1,800&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="front-fond.webp">
+<link rel="preload" as="image" href="front-1.webp">
 <style>
-  :root{
-    --bg:#ffffff;
-    --fg:#000000;
-    --mid:#8a8a8a;
-    --dim:#5c5c5c;
-    --line:rgba(255,255,255,0.14);
-  }
-  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
-  html,body{
-    margin:0; padding:0;
-    height:100%; width:100%;
-    overflow:hidden;
-    background:var(--bg); color:var(--fg);
-    font-family:'IBM Plex Sans', -apple-system, Helvetica, Arial, sans-serif;
-    -webkit-font-smoothing:antialiased;
-    touch-action:none;
-  }
-  /* desktop grab-to-navigate affordance — additive to the passive
-     mouse-follow parallax, doesn't apply on touch (no mouse events there) */
-  body.grabbable{ cursor:grab; }
-  body.grabbable.grabbing{ cursor:grabbing; }
-  body.grabbable .arrow{ cursor:pointer; }
+:root{
+  --paper:#ebe4d6; --paper-2:#e2dac9; --ink:#111; --red:#d22123; --tech:#7d7d7d;
+  /* cube edge: fit by height like the original (bleeds past the sides on phones) */
+  --s:min(66svh, 150vw);
+  --display:'Anton', Impact, 'Arial Narrow', sans-serif;
+  --cond:'Roboto Condensed', 'Arial Narrow', sans-serif;
+  --mono:'IBM Plex Mono', ui-monospace, monospace;
+}
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{
+  margin:0; height:100%; overflow:hidden; background:var(--paper); color:var(--ink);
+  font-family:var(--cond); -webkit-font-smoothing:antialiased;
+  touch-action:none; overscroll-behavior:none; user-select:none; -webkit-user-select:none;
+}
+img{ display:block; -webkit-user-drag:none; }
+body.grab{ cursor:grab; } body.grabbing{ cursor:grabbing; }
 
-  #canvas-wrap{ position:fixed; inset:0; z-index:0; }
-  canvas{ display:block; }
+/* paper grain (static, no blend mode) */
+body::after{
+  content:''; position:fixed; inset:0; z-index:50; pointer-events:none; opacity:.07;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
 
-  /* ---- face slides (screen-space, always upright) ---- */
-  #faces{ position:fixed; inset:0; z-index:5; }
-  .face{
-    position:absolute; inset:0;
-    opacity:0; pointer-events:none;
-    transition: transform .6s cubic-bezier(.22,.61,.36,1), opacity .6s ease;
-  }
-  .face.visible{ opacity:1; z-index:2; pointer-events:auto; }
+/* ============ CUBE (CSS 3D, background) ============ */
+#scene{ position:fixed; inset:0; display:grid; place-items:center; perspective:calc(var(--s) * 2.6); z-index:1; }
+#cube{ position:relative; width:var(--s); height:var(--s); transform-style:preserve-3d; }
+.face{
+  position:absolute; inset:0; overflow:hidden; backface-visibility:hidden; -webkit-backface-visibility:hidden;
+  border:5px solid var(--ink); background:var(--paper-2);
+}
+.face::before{  /* empty face = halftone screentone */
+  content:''; position:absolute; inset:0;
+  background-image:radial-gradient(circle, var(--ink) 1.3px, transparent 1.8px); background-size:10px 10px;
+  -webkit-mask-image:linear-gradient(135deg, transparent 30%, #000 100%); mask-image:linear-gradient(135deg, transparent 30%, #000 100%);
+  opacity:.55;
+}
+.face .bg{ position:absolute; inset:0; }      /* rotated in JS so the art always lands upright */
+.face .bg img{ width:100%; height:100%; object-fit:cover; }
 
-  /* global title overlay — a sibling of #canvas-wrap. The comic-caption
-     "bulle" below is a solid white card, so it no longer needs to blend
-     against the canvas for contrast (a solid white bg with black text is
-     already always readable) — see the note on .f-title. */
-  #global-title{
-    position:fixed; top:0; left:0; right:0; z-index:6;
-    display:flex; justify-content:center;
-    padding: max(24px, calc(env(safe-area-inset-top) + 14px)) 20px 0;
-    pointer-events:none;
-  }
-  /* the "bulle de BD": a white card with a black hand-drawn-ish border —
-     each corner gets a different radius so it reads as sketched rather
-     than a perfect CSS rounded rect, plus a hard (unblurred) offset
-     shadow and a slight permanent tilt for that pasted-on-the-page feel */
-  #global-title .bubble{
-    position:relative;
-    background:#ffffff;
-    border:3px solid #000000;
-    border-radius: 26px 34px 22px 36px / 32px 20px 38px 24px;
-    box-shadow: 7px 7px 0 0 #000000;
-    padding: 20px 26px 24px;
-    max-width: min(90vw, 620px);
-    display:flex; flex-direction:column; align-items:center; text-align:center;
-    transform: translateY(16px) rotate(-1.1deg);
-    opacity:0;
-    transition:opacity .5s ease, transform .5s cubic-bezier(.22,.61,.36,1);
-  }
-  /* comic tail aimed toward the center of the viewport */
-  #global-title .bubble::before,
-  #global-title .bubble::after{
-    content:'';
-    position:absolute;
-    left:50%;
-    transform:translateX(-50%);
-    width:0; height:0;
-    pointer-events:none;
-  }
-  #global-title .bubble::before{
-    top:calc(100% - 1px);
-    border-left:18px solid transparent;
-    border-right:18px solid transparent;
-    border-top:30px solid #000000;
-  }
-  #global-title .bubble::after{
-    top:calc(100% - 1px);
-    border-left:12px solid transparent;
-    border-right:12px solid transparent;
-    border-top:22px solid #ffffff;
-  }
-  .eyebrow{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:11px; letter-spacing:0.3em; text-transform:uppercase;
-    color:#3a3a3a; margin-bottom:10px;
-    opacity:0;
-    transition:opacity .4s ease;
-  }
-  .f-title{
-    /* modern manga/BD display face — bold, condensed, high-impact, reads
-       well small on mobile where most visitors will actually see it */
-    font-family:'Dela Gothic One', 'IBM Plex Mono', monospace;
-    font-weight:400;
-    text-transform:uppercase;
-    font-size:clamp(46px, 15vw, 112px);
-    line-height:0.92;
-    color:#000000;
-    margin:0;
-    opacity:0;
-    transition:opacity .4s ease;
-    transition-delay:.05s;
-  }
-  .subtitle{
-    /* comic dialogue lettering — Comic Neue is the clean modern take on
-       classic comic-book speech-bubble type, distinct from the bold
-       poster energy of the title font above */
-    font-family:'Comic Neue', 'IBM Plex Sans', -apple-system, Helvetica, Arial, sans-serif;
-    font-weight:700;
-    font-size:clamp(14px, 3.6vw, 17px);
-    line-height:1.45; color:#3a3a3a;
-    max-width:32ch; margin:14px 0 0;
-    opacity:0;
-    transition:opacity .4s ease;
-    transition-delay:.1s;
-  }
-  #global-title.content-in .bubble{   opacity:1; transform:translateY(0) rotate(-1.1deg); }
-  #global-title.content-in .eyebrow{  opacity:1; }
-  #global-title.content-in .f-title{  opacity:1; }
-  #global-title.content-in .subtitle{ opacity:1; }
+/* ============ FULL-SCREEN PAGES over the cube ============ */
+.set{ position:fixed; inset:0; z-index:5; visibility:hidden; pointer-events:none; }
+.set.on{ visibility:visible; }
+.ly{ position:absolute; inset:0; }
+.ly img{ width:100%; height:100%; object-fit:cover; }
+.notes{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+.it{ position:absolute; pointer-events:auto; }
+.it .pp{ transform:rotate(var(--rot, 0deg)); }
 
-  /* the case itself — the drawing now fills the whole face */
-  .drawing-half{
-    position:absolute; inset:0; z-index:1;
-    overflow:hidden;
-  }
-  .drawing-layers{
-    position:absolute; inset:0;
-    width:100%; height:100%;
-  }
-  .drawing-layers .layer{
-    position:absolute; inset:0;
-    opacity:0;
-    transition:opacity .2s ease;
-  }
-  .drawing-layers .layer-inner{
-    width:100%; height:100%;
-    /* 2D translate only now — the rotateX/rotateY 3D tilt was cut: a 3D
-       transform forces the browser into full perspective-correct
-       recompositing every frame, categorically more expensive than a
-       flat translate, even fully decoupled from the filter/blend below.
-       This was the next-biggest cost after the transform/filter split. */
-    transform: translate3d(var(--mx,0px), var(--my,0px), 0);
-    will-change: transform;
-  }
-  .drawing-layers .layer-art{
-    position:relative;
-    width:100%; height:100%;
-    background-image: var(--layer-src);
-    background-size:cover;
-    /* crop anchor point — tweak this one value if drawings still get
-       cut off on mobile portrait; the desktop counterpart is the
-       --layer-pos-desktop rule just below */
-    background-position:center top;
-    background-repeat:no-repeat;
-    /* forces its own compositing layer, independent from .layer-inner's
-       continuously-updating transform above — without this, some
-       browsers still bundle the two into one recomposited unit instead
-       of truly caching this element's (blended) output as a separate,
-       reusable texture */
-    transform: translateZ(0);
-  }
-  /* hidden by default — only the 2 FRONT layers below turn it on. Costs
-     nothing on every other layer/face. */
-  .drawing-layers .layer-shadow{ display:none; }
-  /* ---- FRONT face depth dressing: hard-edged cast shadow + simulated
-     light on the 2 closest layers only (the 2 background ones stay
-     plain — they read as backdrop anyway, so the effect there was cost
-     without much visible payoff). This runs desktop-only already (see
-     isDesktop in JS — mobile never executes any of this), so all of the
-     budget below is purely a desktop-polish cost, trimmed to what's
-     actually worth it.
+/* technical annotations — grey construction lines & labels */
+.notes .ln{ fill:none; stroke:var(--tech); stroke-width:1.2; stroke-linecap:round; }
+.notes .dash{ stroke-dasharray:5 5; }
+.notes .dot{ fill:var(--tech); }
+.notes text{
+  font:400 10.5px/1 var(--mono); letter-spacing:.08em; text-transform:uppercase; fill:#5f5f5f;
+  paint-order:stroke; stroke:rgba(235,228,214,.85); stroke-width:3px; stroke-linejoin:round;
+}
 
-     Shadow technique, 2nd rewrite: filter:drop-shadow() (blur-based) is
-     replaced entirely — blur is expensive at the moment it's generated
-     even when the result is later cached, and some browsers were still
-     visibly re-blurring it during the live parallax drag. .layer-shadow
-     is a plain duplicate of the same art, background-position identical
-     to .layer-art (same crop, same alignment), tinted solid black via
-     filter:brightness(0) — a near-free filter, nothing like blur's cost
-     — offset a few pixels via transform, and NOT further transformed
-     per frame (it inherits its parent .layer-inner's translate along
-     with .layer-art, but has no animation of its own). Hard edge
-     instead of soft, but that reads as a deliberate flat BD/manga
-     shadow rather than a compromise.
+/* caption box (title) */
+.caption .pp{ background:var(--paper); border:3px solid var(--ink); box-shadow:6px 6px 0 var(--ink); padding:.5em .75em .6em; }
+.caption .eyebrow{ font:700 11px/1.25 var(--cond); letter-spacing:.18em; text-transform:uppercase; color:var(--red); }
+.caption h1, .caption h2{ margin:.08em 0 0; font:400 clamp(48px, 15vw, 118px)/.86 var(--display); text-transform:uppercase; }
+.caption h1 em, .caption h2 em{ font-style:normal; color:var(--red); }
+.caption p{ margin:.5em 0 0; max-width:34ch; font:400 15px/1.35 var(--cond); }
 
-     Light technique unchanged from the previous pass: background-blend-
-     mode blends the art and a gradient within one ordinary paint step,
-     no separate element/isolated group/mask needed.
-     Scoped to FRONT only for now — trivial to lift the face selector
-     once this look is approved. ---- */
-  /* FRONT dynamic shadows disabled for now. Keep this block available if
-     the shadow treatment needs to return on another face later.
-  .face[data-face="FRONT"] .drawing-layers .layer[data-depth="95"] .layer-shadow{
-    display:block;
-    position:absolute; inset:0;
-    background-image: var(--layer-src);
-    background-size:cover;
-    background-position:center top;
-    background-repeat:no-repeat;
-    filter: brightness(0);
-    opacity:.4;
-    transform: translate3d(7px, 10px, 0);
-  }
-  .face[data-face="FRONT"] .drawing-layers .layer[data-depth="65"] .layer-shadow{
-    display:block;
-    position:absolute; inset:0;
-    background-image: var(--layer-src);
-    background-size:cover;
-    background-position:center top;
-    background-repeat:no-repeat;
-    filter: brightness(0);
-    opacity:.3;
-    transform: translate3d(5px, 7px, 0);
-  }
-  */
-  .face[data-face="FRONT"] .drawing-layers .layer[data-depth="95"] .layer-art{
-    background-image: var(--layer-src), radial-gradient(circle at 28% 18%, rgba(255,255,255,.55), transparent 62%);
-    background-blend-mode: normal, soft-light;
-    background-size: cover, cover;
-    background-position: center top, center top;
-    background-repeat: no-repeat, no-repeat;
-    /* clip the whole blended result (art + light) to the art's own
-       alpha silhouette — the gradient itself has no shape of its own,
-       it's a plain fill that spans the full box, so wherever the art is
-       transparent, "normal" blend just lets it show through unmasked.
-       That's the same leak as before, reintroduced when mix-blend-mode
-       + mask on a separate element got replaced with the cheaper
-       background-blend-mode — mask still needed, just applied once here
-       instead of on a whole extra element+isolated blend group. */
-    -webkit-mask-image: var(--layer-src); mask-image: var(--layer-src);
-    -webkit-mask-mode: alpha; mask-mode: alpha;
-    -webkit-mask-size: cover; mask-size: cover;
-    -webkit-mask-position: center top; mask-position: center top;
-    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  }
-  .face[data-face="FRONT"] .drawing-layers .layer[data-depth="65"] .layer-art{
-    background-image: var(--layer-src), radial-gradient(circle at 28% 18%, rgba(255,255,255,.4), transparent 62%);
-    background-blend-mode: normal, soft-light;
-    background-size: cover, cover;
-    background-position: center top, center top;
-    background-repeat: no-repeat, no-repeat;
-    -webkit-mask-image: var(--layer-src); mask-image: var(--layer-src);
-    -webkit-mask-mode: alpha; mask-mode: alpha;
-    -webkit-mask-size: cover; mask-size: cover;
-    -webkit-mask-position: center top; mask-position: center top;
-    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  }
-  @media (min-aspect-ratio: 1/1){
-    .face[data-face="FRONT"] .drawing-layers .layer[data-depth="95"] .layer-art,
-    .face[data-face="FRONT"] .drawing-layers .layer[data-depth="65"] .layer-art{
-      background-position: center 30%, center 30%;
-      -webkit-mask-position: center 30%; mask-position: center 30%;
-    }
-    /* FRONT shadow alignment retained for possible future reuse.
-    .face[data-face="FRONT"] .drawing-layers .layer[data-depth="95"] .layer-shadow,
-    .face[data-face="FRONT"] .drawing-layers .layer[data-depth="65"] .layer-shadow{
-      background-position: center 30%;
-    }
-    */
-  }
-  /* on a wide/short viewport (laptop-ish), "cover" stretches the same
-     portrait image much taller than the container, so anchoring at the
-     very top leaves mostly empty canvas visible and crops the drawing
-     out the bottom — shifting the anchor down brings it back into
-     frame. Single tunable value: adjust the 30% if it's still off. */
-  @media (min-aspect-ratio: 1/1){
-    .drawing-layers .layer-art{
-      background-position:center 30%;
-    }
-  }
-  .face.content-in .drawing-layers .layer{ opacity:1; }
+/* speech bubble */
+.bubble .pp{
+  position:relative; width:max-content; max-width:min(64vw, 30ch);
+  background:#fff; border:3px solid var(--ink); border-radius:26px 34px 22px 36px / 32px 20px 38px 24px;
+  box-shadow:5px 5px 0 var(--ink); padding:.65em .95em .7em;
+  font:800 italic clamp(15px, 4vw, 19px)/1.22 var(--cond);
+}
+.bubble .pp::before, .bubble .pp::after{ content:''; position:absolute; width:0; height:0; }
+/* tail down-left (default) */
+.bubble .pp::before{ left:18%; top:100%; border:14px solid transparent; border-top:24px solid var(--ink); border-left-width:4px; }
+.bubble .pp::after { left:calc(18% + 3px); top:calc(100% - 4px); border:10px solid transparent; border-top:19px solid #fff; border-left-width:2px; }
+/* .r = tail on the right */
+.bubble.r .pp::before{ left:auto; right:18%; border-left-width:14px; border-right-width:4px; }
+.bubble.r .pp::after { left:auto; right:calc(18% + 3px); border-left-width:10px; border-right-width:2px; }
+/* .l = tail pointing left */
+.bubble.l .pp::before{ left:auto; right:100%; top:38%; border:12px solid transparent; border-right:26px solid var(--ink); border-bottom-width:3px; }
+.bubble.l .pp::after { left:auto; right:calc(100% - 4px); top:calc(38% + 4px); border:8px solid transparent; border-right:20px solid #fff; border-bottom-width:2px; }
 
-  /* ---- directional hints (always available now) ---- */
-  .arrow{
-    position:fixed; z-index:12;
-    font-family:'IBM Plex Mono', monospace; font-size:14px; color:var(--dim);
-    opacity:0.75; pointer-events:auto; cursor:pointer;
-    display:flex; align-items:center; justify-content:center;
-  }
-  .arrow.up    { top: max(16px, env(safe-area-inset-top));    left:50%; transform:translateX(-50%); }
-  .arrow.down  { bottom: max(16px, env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); }
-  .arrow.left  { left: max(10px, env(safe-area-inset-left));  top:50%; transform:translateY(-50%); }
-  .arrow.right { right: max(10px, env(safe-area-inset-right)); top:50%; transform:translateY(-50%); }
+.sfx .pp{ font:400 clamp(40px, 12vw, 84px)/.9 var(--display); color:var(--red); text-transform:uppercase;
+  -webkit-text-stroke:2px var(--ink); paint-order:stroke fill; text-shadow:4px 4px 0 var(--ink); }
 
-  .hint{
-    position:fixed; bottom: max(46px, calc(env(safe-area-inset-bottom) + 28px));
-    left:0; right:0; z-index:10; text-align:center; pointer-events:none;
-    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.16em;
-    text-transform:uppercase; color:var(--dim);
-    transition:opacity .6s ease;
-  }
-  .hint.hidden{ opacity:0; }
+/* comic page of cases (bd.html style) */
+.grid .pp{ display:grid; grid-template-columns:1fr 1fr; gap:12px; height:100%; }
+.case{
+  position:relative; border:3px solid var(--ink); box-shadow:5px 5px 0 var(--ink); overflow:hidden; min-height:0;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 27px, rgba(125,125,125,.18) 27px 28px),
+    repeating-linear-gradient(90deg, transparent 0 27px, rgba(125,125,125,.18) 27px 28px), var(--paper);
+}
+.case:nth-child(odd){ transform:rotate(-.6deg); } .case:nth-child(even){ transform:rotate(.7deg); }
+.case .yr{ position:absolute; right:6px; bottom:-.12em; font:400 clamp(44px, 12vw, 110px)/1 var(--display); color:transparent; -webkit-text-stroke:1.5px #9a9a9a; }
+.case .cap{ position:absolute; left:-3px; top:-3px; max-width:92%; background:var(--paper); border:3px solid var(--ink); padding:.35em .5em; }
+.case .cap small{ display:block; font:700 10px/1 var(--cond); letter-spacing:.15em; color:var(--red); }
+.case .cap b{ display:block; margin-top:.2em; font:900 clamp(12px, 3.3vw, 17px)/1.05 var(--cond); text-transform:uppercase; }
+.case .todo{ position:absolute; left:8px; right:8px; bottom:8px; font:400 10px/1.3 var(--mono); color:#6f6f6f; text-transform:uppercase; letter-spacing:.05em; }
+
+.links .pp{ display:flex; flex-wrap:wrap; gap:10px; }
+.btn{
+  display:inline-block; text-decoration:none; padding:11px 14px; cursor:pointer;
+  font:700 14px/1 var(--cond); letter-spacing:.05em; text-transform:uppercase;
+  background:var(--paper); color:var(--ink); border:3px solid var(--ink); box-shadow:4px 4px 0 var(--red);
+}
+.btn.red{ background:var(--red); box-shadow:4px 4px 0 var(--ink); }
+
+
+/* ============ "CRAZY" LAYER: giant type, stickers, CTAs ============ */
+.ly{ z-index:1; } .notes{ z-index:2; } .it{ z-index:3; } .it.big{ z-index:0; }
+.caption.bare .pp{ background:none; border:0; box-shadow:none; padding:0; }
+.caption.bare .eyebrow{ display:inline-block; background:var(--ink); color:var(--paper); padding:.35em .55em; margin-bottom:.35em; }
+.caption.bare h1, .caption.bare h2{
+  font-size:clamp(84px, 25vw, 230px); line-height:.88; letter-spacing:-.01em;
+  text-shadow:6px 6px 0 var(--red); margin-top:.16em;
+}
+.caption.bare h1 em, .caption.bare h2 em{ text-shadow:6px 6px 0 var(--ink);
+}
+@media (min-aspect-ratio:1/1){ .caption.bare h1, .caption.bare h2{ font-size:min(15vw, 21svh); } }
+.big .pp{
+  font:400 clamp(170px, 56vw, 560px)/.78 var(--display); text-transform:uppercase; white-space:nowrap;
+  color:transparent; -webkit-text-stroke:2px rgba(17,17,17,.28);
+}
+.sticker .pp{
+  font:400 clamp(26px, 7.5vw, 56px)/.88 var(--display); text-transform:uppercase;
+  padding:.3em .45em .25em; border:4px solid var(--ink); box-shadow:6px 6px 0 var(--ink);
+}
+.sticker.red .pp{ background:var(--red); color:var(--ink); }
+.sticker.dark .pp{ background:var(--ink); color:var(--paper); box-shadow:6px 6px 0 var(--red); }
+.cta .pp{ display:flex; flex-wrap:wrap; gap:12px; }
+.go{
+  display:inline-block; text-decoration:none; cursor:pointer;
+  font:400 clamp(30px, 9vw, 64px)/.9 var(--display); text-transform:uppercase;
+  padding:.22em .45em .18em; background:var(--red); color:var(--ink);
+  border:4px solid var(--ink); box-shadow:7px 7px 0 var(--ink); transition:transform .15s ease, box-shadow .15s ease;
+}
+.go.paper{ background:var(--paper); }
+.go:hover{ transform:translate(-3px,-3px) rotate(-1deg); box-shadow:10px 10px 0 var(--ink); }
+.go:active{ transform:translate(3px,3px); box-shadow:3px 3px 0 var(--ink); }
+.bubble .pp{ font-size:clamp(17px, 4.6vw, 23px); max-width:min(66vw, 26ch); }
+
+/* posters slide in front of the name on wide screens */
+@media (min-aspect-ratio:1/1){ .ly.over{ z-index:4; } }
+/* pinned sketch card */
+.pin .pp{ background:#fbf9f4; padding:10px 10px 30px; border:1px solid #bdb6a6; box-shadow:7px 7px 0 var(--ink); position:relative; }
+.pin .pp::before{ content:''; position:absolute; left:50%; top:-12px; width:90px; height:24px; transform:translateX(-50%) rotate(-4deg); background:rgba(210,200,170,.75); }
+.pin img{ width:100%; height:auto; }
+.pin .fig{ position:absolute; left:10px; bottom:9px; white-space:nowrap; font:400 clamp(8px, 2.1vw, 10.5px)/1 var(--mono); letter-spacing:.08em; text-transform:uppercase; color:#6f6f6f; }
+/* character designs: cut-outs breaking out of the page, hard ink shadow + technical callout */
+.char{ pointer-events:none; }
+.char img{ width:100%; height:auto; filter:drop-shadow(6px 6px 0 rgba(17,17,17,.85)); }
+.char .fig{
+  position:absolute; left:2%; top:-4px; max-width:96%; padding-left:26px; line-height:1.3;
+  font:400 clamp(8.5px, 2.2vw, 10.5px)/1 var(--mono); letter-spacing:.08em; text-transform:uppercase; color:#5f5f5f;
+  background:linear-gradient(var(--tech), var(--tech)) left center / 20px 1px no-repeat;
+}
+/* a case filled with a drawing */
+.case-art{ position:absolute; inset:0; }
+.case-art img{ width:100%; height:100%; object-fit:cover; object-position:var(--pos, 50% 50%); }
+/* on wide screens, some callouts point in from the right instead of sitting on the title */
+@media (min-aspect-ratio:1/1){ .char.fig-r .fig{ left:88%; top:22%; max-width:none; white-space:nowrap; } }
+/* graphic-design icons: little die-cut stickers */
+.icon{ pointer-events:none; }
+.icon img{ width:100%; height:auto; filter:drop-shadow(4px 4px 0 rgba(17,17,17,.9)); }
+/* a character tucked behind the big title */
+.it.behind{ z-index:2; }
+/* software logos stamped in a case corner */
+.case-ico{ position:absolute; right:7px; bottom:7px; display:flex; gap:5px; }
+.case-ico img{ width:clamp(22px, 5.5vw, 38px); height:auto; filter:drop-shadow(2px 2px 0 rgba(17,17,17,.9)); }
+/* 6-case project page: 2 × 3 on phones, 3 × 2 on wide screens */
+.grid.six .pp{ grid-template-rows:repeat(3, 1fr); }
+.grid.six .yr{ font-size:clamp(40px, 10vw, 90px); }
+@media (min-aspect-ratio:1/1){ .grid.six .pp{ grid-template-columns:repeat(3, 1fr); grid-template-rows:repeat(2, 1fr); } }
+
+/* ============ CHROME ============ */
+.arrow{
+  position:fixed; z-index:8; width:40px; height:40px; display:grid; place-items:center; cursor:pointer;
+  border:0; background:transparent; font:700 18px/1 var(--cond); color:var(--ink); opacity:.5;
+}
+.arrow:hover{ opacity:1; }
+.arrow.up{ top:max(2px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%); }
+.arrow.down{ bottom:max(2px, env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); }
+.arrow.left{ left:max(0px, env(safe-area-inset-left)); top:50%; transform:translateY(-50%); }
+.arrow.right{ right:max(0px, env(safe-area-inset-right)); top:50%; transform:translateY(-50%); }
+#express-btn{
+  position:fixed; z-index:9; right:14px; bottom:max(14px, env(safe-area-inset-bottom));
+  font:700 13px/1 var(--cond); letter-spacing:.06em; text-transform:uppercase;
+  background:var(--ink); color:var(--paper); border:0; cursor:pointer; padding:11px 13px;
+  box-shadow:4px 4px 0 var(--red); transform:rotate(1.5deg);
+}
+:focus-visible{ outline:3px solid var(--red); outline-offset:3px; }
+#express-btn .xs{ display:none; }
+@media (max-width:600px){ #express-btn .xl{ display:none; } #express-btn .xs{ display:inline; } }
+
+/* Express résumé dialog */
+#express{ width:min(900px, 100vw - 24px); max-height:92svh; padding:0; border:3px solid var(--ink); box-shadow:10px 10px 0 var(--red); background:#f8f6f1; color:var(--ink); user-select:text; -webkit-user-select:text; touch-action:pan-y; }
+#express::backdrop{ background:rgba(17,17,17,.75); }
+.x-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; padding:20px 22px 14px; background:var(--ink); color:var(--paper); position:sticky; top:0; z-index:1; }
+.x-head h2{ margin:0; font:400 32px/1 var(--display); text-transform:uppercase; }
+.x-head p{ margin:.3em 0 0; font:400 14px/1.3 var(--cond); }
+.x-close{ background:var(--red); color:var(--ink); border:0; font:700 14px/1 var(--cond); text-transform:uppercase; padding:10px 12px; cursor:pointer; }
+.x-body{ display:grid; grid-template-columns:1fr; gap:22px; padding:20px 22px 26px; font:400 15px/1.45 var(--cond); }
+@media (min-width:720px){ .x-body{ grid-template-columns:230px 1fr; } }
+.x-body h3{ margin:0 0 .5em; font:700 11px/1 var(--cond); letter-spacing:.22em; text-transform:uppercase; color:#666; }
+.x-body section + section{ margin-top:20px; }
+.x-body ul{ margin:0; padding:0 0 0 1.1em; }
+.x-job{ padding:12px 0; border-top:1px solid #ddd; }
+.x-job b{ font-size:17px; }
+.x-job .when{ font:700 12px/1 var(--cond); color:#666; letter-spacing:.1em; }
+.chips{ display:flex; flex-wrap:wrap; gap:6px; }
+.chips span{ font:400 13px/1 var(--cond); border:1px solid #aaa; padding:5px 7px; }
+
+@media (min-aspect-ratio: 1/1){ :root{ --s:min(72svh, 860px); } }
 </style>
 </head>
 <body>
 
-<div id="canvas-wrap"></div>
+<div id="scene" aria-hidden="true"><div id="cube"></div></div>
+<main id="pages"></main>
 
-<!-- global title overlay: a direct sibling of #canvas-wrap (not nested
-     inside #faces/.face) so mix-blend-mode on the title can actually
-     composite against the WebGL canvas — see CSS comment above #global-title -->
-<div id="global-title">
-  <div class="bubble">
-    <div class="eyebrow" id="gt-eyebrow"></div>
-    <h1 class="f-title" id="gt-title"></h1>
-    <p class="subtitle" id="gt-subtitle"></p>
+<button class="arrow up"    type="button" aria-label="Go up">↑</button>
+<button class="arrow down"  type="button" aria-label="Go down">↓</button>
+<button class="arrow left"  type="button" aria-label="Go left">←</button>
+<button class="arrow right" type="button" aria-label="Go right">→</button>
+<button id="express-btn" type="button" aria-haspopup="dialog">⚡ <span class="xl">Express résumé</span><span class="xs">CV</span></button>
+
+<dialog id="express" aria-labelledby="x-title">
+  <div class="x-head">
+    <div><h2 id="x-title">Valentin Andrieu</h2><p>UI/UX Explorer · 2D/3D Artist · Graphic Designer</p></div>
+    <button class="x-close" type="button" data-close>Close ✕</button>
   </div>
-</div>
-
-<div id="faces">
-  <div class="face" data-face="FRONT">
-    <div class="drawing-half"><div class="drawing-layers" data-drawing></div></div>
+  <div class="x-body">
+    <aside>
+      <section><h3>Contact</h3>
+        <a href="mailto:valentinjasonamour@gmail.com">valentinjasonamour@gmail.com</a><br>
+        <a href="https://leblogdeval.fr" target="_blank" rel="noopener">leblogdeval.fr</a>
+      </section>
+      <section><h3>Development</h3><ul><li>JavaScript / TypeScript</li><li>Three.js &amp; WebGL</li><li>CSS3 / SASS</li></ul></section>
+      <section><h3>3D &amp; visual design</h3><ul><li>Modeling &amp; animation (Blender)</li><li>Traditional &amp; digital drawing</li><li>Art direction / brand identity</li></ul></section>
+      <section><h3>Strategy</h3><ul><li>Web marketing</li><li>Branding &amp; visual identity</li></ul></section>
+      <section><h3>Stack</h3><div class="chips"><span>Three.js</span><span>WebGL</span><span>TypeScript</span><span>SASS</span><span>SvelteKit</span><span>WordPress</span><span>Blender</span></div></section>
+      <section><h3>Education</h3><b>2025</b> — UI/UX Design, Interface Designer<br><b>2016</b> — Multimedia &amp; Web Design</section>
+    </aside>
+    <div>
+      <section><h3>Profile</h3><p style="margin:0">Designer-developer driven by storytelling in interactive experiences. I treat every interface as a journey to live — from the interaction concept to the front-end build — turning a brand identity into a story people want to explore, not just a page they read.</p></section>
+      <section><h3>Approach</h3><p style="margin:0"><b>Storytelling</b> — a beginning, a tension, a resolution. · <b>Gamification</b> — micro-interactions and small surprises. · <b>Prototyping</b> — from idea to hands-on demo, fast.</p></section>
+      <section><h3>Experience</h3>
+        <div class="x-job"><div class="when">2023 → 2025</div><b>Art Direction &amp; Digital Automation</b> — Graphic Designer, Print &amp; Digital<ul><li>Designed brand identities rolled out across web and print</li><li>Automated mailing campaigns and promotional asset production</li><li>Bridged brand strategy and visual execution</li></ul></div>
+        <div class="x-job"><div class="when">2021</div><b>Web Design, Branding &amp; Social Strategy</b> — Community Management<ul><li>Created signage and brand collateral</li><li>Managed social media presence and content strategy</li></ul></div>
+        <div class="x-job"><div class="when">2017 → 2018</div><b>3D Modeling &amp; Event Scenography</b> — 3D Design, Blender<ul><li>Designed 3D structures for live events</li><li>Web design and related promotional material</li></ul></div>
+        <div class="x-job"><div class="when">2016</div><b>Pre-press Production &amp; Industrial Calibration</b> — Print Production<ul><li>Machine setup and calibration for large-scale print runs</li><li>Graphic design and reprographics</li></ul></div>
+      </section>
+    </div>
   </div>
-  <div class="face" data-face="RIGHT">
-    <div class="drawing-half"><div class="drawing-layers" data-drawing></div></div>
-  </div>
-  <div class="face" data-face="BACK">
-    <div class="drawing-half"><div class="drawing-layers" data-drawing></div></div>
-  </div>
-  <div class="face" data-face="LEFT">
-    <div class="drawing-half"><div class="drawing-layers" data-drawing></div></div>
-  </div>
-  <div class="face" data-face="TOP">
-    <div class="drawing-half"><div class="drawing-layers" data-drawing></div></div>
-  </div>
-  <div class="face" data-face="BOTTOM">
-    <div class="drawing-half"><div class="drawing-layers" data-drawing></div></div>
-  </div>
+</dialog>
 
-</div>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<script>
+/* =========================================================================
+   FACES — THE ONLY THING TO EDIT
+   bg      : image on the cube face itself (square; '' = halftone)
+   layers  : full-screen parallax drawing, [{src, depth}] back → front
+   img     : the layers' pixel size, pos: crop anchor {p: portrait, l: landscape}
+   items   : comic elements over the page. at = CSS position on phones,
+             atL = on landscape screens.
+             caption {eyebrow,title,text} · bubble {text, cls:'r'|'l'} · sfx {text}
+             grid {cases:[{yr,title,todo}]} · links {links:[{href,text,cls}]}
+   notes   : grey technical annotations, drawn line by line.
+             space 'scene' = % of the layer image (sticks to the drawing),
+             'face' = % of the cube face.
+             dim {a,b,label} · lead {p,t,label} · circ {c,r,dashed} · cross {p} · hline {y,label}
+   ========================================================================= */
+const FACES = {
+  FRONT: {
+    bg:'front-fond.webp',
+    layers:[{src:'front-3.webp', depth:18}, {src:'front-2.webp', depth:40, over:true}, {src:'front-1.webp', depth:80}],
+    img:[1920,1080], pos:{ p:'57% 50%', l:'50% 30%' },
+    items:[
+      { type:'caption', cls:'bare', depth:10, rot:-2, eyebrow:'Illustrator · Graphic designer · UI/UX · 2D/3D', title:'Val<br><em>Andrieu</em>', tag:'h1',
+        at:'left:4vw;top:max(12px, env(safe-area-inset-top))', atL:'left:4vw;top:3svh' },
+      { type:'sticker', cls:'red', depth:16, rot:7, text:'10 yrs<br>of XP',
+        at:'right:4vw;top:31svh', atL:'right:5vw;top:7svh' },
+      { type:'bubble', depth:24, cls:'r', text:'Oh, you scanned it? Come in — swipe any way you like.',
+        at:'left:4vw;top:31svh', atL:'right:4vw;top:34svh' },
+      { type:'cta', depth:20, rot:-2, links:[{ href:'mailto:valentinjasonamour@gmail.com', text:'Hire me →' }],
+        at:'left:4vw;bottom:max(14px, env(safe-area-inset-bottom))', atL:'left:4vw;bottom:5svh' },
+    ],
+    notes:{ space:'scene', list:[
+      { k:'dim', a:[54.3,13.5], b:[76.2,13.5], label:'window · 2 × 2 panes' },
+      { k:'cross', p:[54.3,17.6] }, { k:'cross', p:[76.2,51.1] },
+      { k:'circ', c:[53,47.5], r:4.6 },
+      { k:'lead', p:[56.5,44], t:[66,62], label:'fig. 1 — the artist, at work' },
+      { k:'lead', p:[40,40], t:[33,24], label:'refs & influences' },
+      { k:'hline', y:66, label:'H.L.' },
+      { k:'lead', p:[34,90], t:[24,82], label:'sketches · a lot of them' },
+    ]},
+  },
+  RIGHT: {
+    bg:'right-fond.webp',
+    items:[
+      { type:'big', depth:4, rot:-8, text:'Draw', at:'left:-4vw;top:30svh', atL:'left:-2vw;top:22svh' },
+      { type:'caption', cls:'bare', depth:10, rot:1.5, eyebrow:'Chapter — Art & illustration', title:'<em>Art</em>',
+        at:'left:4vw;top:max(12px, env(safe-area-inset-top))', atL:'left:5vw;top:4svh' },
+      { type:'sticker', cls:'dark', depth:16, rot:-6, text:'Hand-drawn.<br>Digitally<br>finished.',
+        at:'right:4vw;top:6svh', atL:'right:6vw;top:8svh' },
+      { type:'char', cls:'fig-r', depth:34, src:'char-armor.webp', label:'fig. 10 — armored scout', alt:'Character design: a young scout in patched red armor',
+        at:'right:-2vw;top:27svh;width:34vw', atL:'left:2vw;top:20svh;width:min(17vw, 28svh)' },
+      { type:'pin', depth:30, rot:-4, src:'front-sketch.webp', label:'fig. 0 — early sketch', alt:'Early line sketch of the hover car',
+        at:'left:5vw;top:25svh;width:46vw', atL:'left:16vw;top:52svh;width:min(17vw, 240px)' },
+      { type:'pin', depth:26, rot:3, src:'pin-oni.webp', label:'fig. 11 — oni-kiba', alt:'Illustration: a hooded swordsman pointing, under a blue sky',
+        at:'display:none', atL:'display:block;right:4vw;top:33svh;width:min(12vw, 20svh)' },
+      { type:'pin', depth:22, rot:-2, src:'pin-landscape.webp', label:'fig. 12 — comic panel · birds', alt:'Comic panel: a flock of birds over hills at sunset',
+        at:'display:none', atL:'display:block;right:20vw;bottom:5svh;width:min(25vw, 360px)' },
+      { type:'icon', depth:26, rot:-8, src:'logo-csp.webp', alt:'Clip Studio Paint', at:'left:54vw;top:30svh;width:12vw', atL:'left:26vw;top:12svh;width:min(5vw, 8svh)' },
+      { type:'icon', depth:26, rot:7, src:'logo-blender.webp', alt:'Blender', at:'left:58vw;top:39svh;width:12vw', atL:'left:30.5vw;top:17svh;width:min(5vw, 8svh)' },
+      { type:'bubble', depth:24, text:'Paper first, then Clip Studio Paint and Blender bring the sketches to life.',
+        at:'right:4vw;bottom:22svh', atL:'left:37vw;top:2svh' },
+      { type:'cta', depth:20, rot:2, links:[{ href:'mailto:valentinjasonamour@gmail.com?subject=Illustration', text:'Commission me →' }],
+        at:'left:4vw;bottom:max(14px, env(safe-area-inset-bottom))', atL:'left:5vw;bottom:5svh' },
+    ],
+    notes:{ space:'face', list:[
+      { k:'circ', c:[80,72], r:31, dashed:true },
+      { k:'circ', c:[75.5,41], r:6 },
+      { k:'lead', p:[75.5,35], t:[86,22], label:'light source' },
+      { k:'lead', p:[31,60], t:[14,44], label:'fig. 2 — R4, 1:43' },
+    ]},
+  },
+  LEFT: {
+    bg:'bg-urban.webp',
+    items:[
+      { type:'big', depth:4, rot:-6, text:'10 yrs', at:'left:-6vw;bottom:2svh', atL:'right:-2vw;bottom:-4svh' },
+      { type:'caption', cls:'bare', depth:10, rot:-1.5, eyebrow:'Chapter — 2016 → 2025', title:'Origin<br><em>story</em>',
+        at:'left:4vw;top:max(12px, env(safe-area-inset-top))', atL:'left:4vw;top:4svh' },
+      { type:'grid', depth:20, at:'left:4vw;right:4vw;top:31svh;bottom:37svh', atL:'left:45vw;right:4vw;top:14svh;bottom:22svh',
+        cases:[
+          { yr:'2016', title:'Pre-press & industrial calibration', src:'case-classroom.webp', pos:'50% 60%', alt:'Pencil sketch: a computer classroom' },
+          { yr:'17', title:'3D modeling & event scenography', src:'case-cave.webp', pos:'45% 55%', alt:'Illustration: a caveman by a fire, lit like a stage' },
+          { yr:'2021', title:'Web design, branding & social', src:'case-coder.webp', pos:'50% 25%', alt:'Drawing: a young designer with headphones, typing', ico:['logo-ps.webp','logo-ai.webp'] },
+          { yr:'25', title:'Art direction & digital automation', src:'case-back.webp', pos:'62% 40%', alt:'Drawing: Val crashed on a mattress, laptop and books around', ico:['logo-xl.webp'] },
+        ] },
+      { type:'char', cls:'fig-r', depth:30, src:'char-pilgrims.webp', label:'fig. 7 — character design · pilgrims', alt:'Character design: two cloaked figures in wide mushroom hats',
+        at:'right:-4vw;bottom:9svh;width:58vw', atL:'left:-2vw;bottom:5svh;width:min(32vw, 56svh)' },
+      { type:'cta', depth:20, rot:-2, links:[{ href:'#express', text:'Full résumé ⚡' }],
+        at:'left:4vw;bottom:max(14px, env(safe-area-inset-bottom))', atL:'left:4vw;bottom:5svh' },
+    ],
+    notes:{ space:'face', list:[ { k:'cross', p:[3,3] }, { k:'cross', p:[97,97] } ]},
+  },
+  BACK: {
+    bg:'',   // new background to come
+    items:[
+      { type:'big', depth:4, rot:7, text:'UX', at:'right:-4vw;top:24svh', atL:'right:2vw;top:12svh' },
+      { type:'caption', cls:'bare', depth:10, rot:1.5, eyebrow:'Front-end design', title:'UI/<em>UX</em>',
+        at:'left:4vw;top:max(12px, env(safe-area-inset-top))', atL:'left:4vw;top:4svh' },
+      { type:'sticker', cls:'red', depth:16, rot:-5, text:'SvelteKit<br>WordPress<br>SCSS<br>i18n',
+        at:'left:5vw;top:30svh', atL:'right:4vw;top:29svh' },
+      { type:'pin', depth:22, rot:4, src:'gd-flyer.webp', label:'fig. 9 — event flyer', alt:'Graphic design: comic-style event flyer for a computer club',
+        at:'left:5vw;top:48svh;width:30vw', atL:'right:24vw;bottom:9svh;width:min(14vw, 24svh)' },
+      { type:'icon', depth:26, rot:-8, src:'gd-bug.webp', alt:'Icon: crashed monitor', at:'right:6vw;top:5svh;width:15vw', atL:'display:block;left:30vw;top:5svh;width:min(7vw, 11svh)' },
+      { type:'icon', depth:26, rot:6, src:'gd-neutral.webp', alt:'Icon: crash-test dummy face', at:'display:none', atL:'display:block;left:45vw;top:3svh;width:min(6vw, 10svh)' },
+      { type:'icon', depth:26, rot:-6, src:'gd-tester.webp', alt:'Icon: smiley with a band-aid', at:'display:none', atL:'display:block;right:30vw;top:6svh;width:min(7vw, 11svh)' },
+      { type:'icon', depth:26, rot:-10, src:'gd-thumb.webp', alt:'Icon: bandaged thumbs-up', at:'left:44vw;top:16svh;width:15vw', atL:'display:block;left:32vw;bottom:16svh;width:min(7vw, 11svh)' },
+      { type:'icon', depth:26, rot:8, src:'gd-happy.webp', alt:'Icon: happy crash-test smiley', at:'right:8vw;top:77svh;width:15vw', atL:'display:block;left:52vw;top:79svh;width:min(7vw, 11svh)' },
+      { type:'char', cls:'fig-r', depth:34, src:'char-dragon.webp', label:'fig. 5 — character design · dragon & rider', alt:'Character design: a furious shaggy dragon with a tiny rider',
+        at:'right:-8vw;top:38svh;width:50vw', atL:'left:-1vw;top:23svh;width:min(30vw, 52svh)' },
+      { type:'bubble', depth:24, cls:'r', text:'…and the obvious stuff I won’t waste your time listing.',
+        at:'left:4vw;top:71svh', atL:'right:4vw;top:7svh' },
+      { type:'cta', depth:20, rot:-2, links:[{ href:'mailto:valentinjasonamour@gmail.com?subject=Website', text:'Build my site →' }],
+        at:'left:4vw;bottom:max(14px, env(safe-area-inset-bottom))', atL:'left:4vw;bottom:5svh' },
+    ],
+    notes:{ space:'face', list:[
+      { k:'cross', p:[10,40] }, { k:'cross', p:[90,80] },
+    ]},
+  },
+  TOP: {
+    items:[
+      { type:'big', depth:4, rot:-5, text:'Work', at:'left:-6vw;bottom:8svh', atL:'right:-3vw;top:2svh' },
+      { type:'caption', cls:'bare', depth:10, rot:-1.5, eyebrow:'Projects & links', title:'Work<br><em>+ links</em>',
+        at:'left:4vw;top:max(12px, env(safe-area-inset-top))', atL:'left:4vw;top:4svh' },
+      { type:'grid', cls:'six', depth:20, at:'left:4vw;right:4vw;top:31svh;bottom:15svh', atL:'left:40vw;right:4vw;top:12svh;bottom:20svh',
+        cases:[
+          { yr:'#01', title:'AS7 Park', todo:'pitch + demo link' },
+          { yr:'#02', title:'GRG Group', todo:'pitch + link' },
+          { yr:'#03', title:'Holographic 3D résumé', todo:'capture / video' },
+          { yr:'#04', title:'NawStar', todo:'pitch + link' },
+          { yr:'#05', title:'Catalog automation · InDesign × Excel', src:'case-catalog.webp', pos:'30% 30%', alt:'Screenshot: InDesign catalog page generated from an Excel sheet with EasyCatalog', ico:['logo-xl.webp'] },
+          { yr:'#06', title:'Project six', todo:'title + pitch + link' },
+        ] },
+      { type:'char', cls:'fig-r', depth:34, src:'char-preh.webp', label:'fig. 8 — the elder', alt:'Character design: a prehistoric elder wearing a horned bull skull, sitting cross-legged',
+        at:'right:3vw;top:11svh;width:38vw', atL:'left:-2vw;top:41svh;width:min(29vw, 48svh)' },
+      { type:'cta', depth:20, rot:-2, links:[{ href:'mailto:valentinjasonamour@gmail.com', text:'Say hi →' }, { href:'https://leblogdeval.fr', text:'Blog', cls:'paper' }],
+        at:'left:4vw;bottom:max(14px, env(safe-area-inset-bottom))', atL:'left:4vw;bottom:5svh' },
+    ],
+  },
+  BOTTOM: {
+    bg:'bg-render.webp',
+    items:[
+      { type:'big', depth:4, rot:-7, text:'3D', at:'right:-6vw;top:20svh', atL:'right:4vw;top:10svh' },
+      { type:'caption', cls:'bare', depth:10, rot:1.5, eyebrow:'3D & interactive', title:'<em>Web</em><br>3D',
+        at:'left:4vw;top:max(12px, env(safe-area-inset-top))', atL:'left:4vw;top:4svh' },
+      { type:'bubble', depth:24, cls:'r', text:'Three.js, GLB viewers, holographic résumé, web mini-games — part of me still dreams of game design!',
+        at:'right:4vw;top:24svh', atL:'right:5vw;bottom:30svh' },
+      { type:'char', cls:'fig-r behind', depth:34, src:'char-mech.webp', label:'fig. 6 — mech · hard-surface design', alt:'Character design: a heavy grey mech',
+        at:'left:-6vw;top:44svh;width:46vw', atL:'left:7vw;top:33svh;width:min(26vw, 40svh)' },
+      { type:'cta', depth:20, rot:2, links:[{ href:'mailto:valentinjasonamour@gmail.com?subject=3D%20%2F%20web', text:'Let’s build it →' }],
+        at:'left:4vw;bottom:max(14px, env(safe-area-inset-bottom))', atL:'left:4vw;bottom:5svh' },
+    ],
+    notes:{ space:'face', list:[
+      { k:'circ', c:[50,50], r:30, dashed:true }, { k:'cross', p:[50,50] },
+      { k:'lead', p:[71,29], t:[84,14], label:'fig. 4 — blender scene · light study' },
+    ]},
+  },
+};
 
-<div class="arrow up">↑</div>
-<div class="arrow down">↓</div>
-<div class="arrow left">←</div>
-<div class="arrow right">→</div>
-
-<div class="hint" id="hint">Swipe — up, down, left, right</div>
-
-<script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js" } }
-</script>
-<script type="module">
-import * as THREE from 'three';
-
-/* =========================================================
-   Real rolling-cube navigation: no dead ends, every face
-   has all four directions available, always. We track the
-   cube's actual orientation (a quaternion) and roll it by
-   90° world-axis steps. The face currently pointing toward
-   the camera is derived from that orientation — not from a
-   hand-made graph — so it behaves like a real cube.
-   ========================================================= */
-const ROT = Math.PI/2;
-const AXIS_X = new THREE.Vector3(1,0,0);
-const AXIS_Y = new THREE.Vector3(0,1,0);
-
-const LOCAL_AXES = [
-  { v:new THREE.Vector3(0,0,1),  label:'FRONT'  },
-  { v:new THREE.Vector3(0,0,-1), label:'BACK'   },
-  { v:new THREE.Vector3(1,0,0),  label:'RIGHT'  },
-  { v:new THREE.Vector3(-1,0,0), label:'LEFT'   },
-  { v:new THREE.Vector3(0,1,0),  label:'TOP'    },
-  { v:new THREE.Vector3(0,-1,0), label:'BOTTOM' },
+/* ================= quaternion helpers (CSS space: x right, y down, z toward you) ================= */
+const PI2 = Math.PI / 2;
+const qAxis = (ax, a) => { const s = Math.sin(a/2); return [ax[0]*s, ax[1]*s, ax[2]*s, Math.cos(a/2)]; };
+const qMul = (a, b) => [
+  a[3]*b[0] + a[0]*b[3] + a[1]*b[2] - a[2]*b[1],
+  a[3]*b[1] - a[0]*b[2] + a[1]*b[3] + a[2]*b[0],
+  a[3]*b[2] + a[0]*b[1] - a[1]*b[0] + a[2]*b[3],
+  a[3]*b[3] - a[0]*b[0] - a[1]*b[1] - a[2]*b[2],
 ];
-
-function frontFaceFromQuat(q){
-  let best = 'FRONT', bestDot = -Infinity;
-  for (const ax of LOCAL_AXES){
-    const w = ax.v.clone().applyQuaternion(q);
-    if (w.z > bestDot){ bestDot = w.z; best = ax.label; }
+const qRot = (q, v) => {
+  const [x,y,z,w] = q, [vx,vy,vz] = v;
+  const tx = 2*(y*vz - z*vy), ty = 2*(z*vx - x*vz), tz = 2*(x*vy - y*vx);
+  return [vx + w*tx + y*tz - z*ty, vy + w*ty + z*tx - x*tz, vz + w*tz + x*ty - y*tx];
+};
+function qSlerp(a, b, t){
+  let d = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3], bb = b;
+  if (d < 0){ d = -d; bb = b.map(v => -v); }
+  if (d > .9995) return a.map((v,i) => v + (bb[i]-v)*t);
+  const th = Math.acos(d), s = Math.sin(th), wa = Math.sin((1-t)*th)/s, wb = Math.sin(t*th)/s;
+  return a.map((v,i) => v*wa + bb[i]*wb);
+}
+const SNAP = [0, .5, -.5, Math.SQRT1_2, -Math.SQRT1_2, 1, -1];   // the 24 cube orientations only use these
+const qSnap = q => q.map(v => SNAP.reduce((p, c) => Math.abs(c - v) < Math.abs(p - v) ? c : p));
+function qCss(q){
+  const [x,y,z,w] = q;
+  return `matrix3d(${1-2*(y*y+z*z)},${2*(x*y+z*w)},${2*(x*z-y*w)},0,${2*(x*y-z*w)},${1-2*(x*x+z*z)},${2*(y*z+x*w)},0,${2*(x*z+y*w)},${2*(y*z-x*w)},${1-2*(x*x+y*y)},0,0,0,0,1)`;
+}
+const AX = [1,0,0], AY = [0,1,0];
+const FACE_Q = { FRONT:[0,0,0,1], BACK:qAxis(AY, Math.PI), RIGHT:qAxis(AY, PI2), LEFT:qAxis(AY, -PI2), TOP:qAxis(AX, PI2), BOTTOM:qAxis(AX, -PI2) };
+const ROLL = { right:[AY,-PI2], left:[AY,PI2], down:[AX,PI2], up:[AX,-PI2] };   // "go right" = finger moves left
+function frontFace(q){
+  let best = 'FRONT', bz = -2;
+  for (const k in FACE_Q){ const z = qRot(qMul(q, FACE_Q[k]), [0,0,1])[2]; if (z > bz){ bz = z; best = k; } }
+  return best;
+}
+function uprightDeg(q, face){   // in-plane 90° step that makes a face's art upright once it faces you
+  let best = 0, by = 2;
+  for (let k = 0; k < 4; k++){
+    const th = k * PI2, y = qRot(qMul(q, FACE_Q[face]), [Math.sin(th), -Math.cos(th), 0])[1];
+    if (y < by){ by = y; best = k * 90; }
   }
   return best;
 }
 
-const OUT = {
-  up:    'translateY(100%)',
-  down:  'translateY(-100%)',
-  left:  'translateX(100%)',
-  right: 'translateX(-100%)',
-};
-const IN_START = {
-  up:    'translateY(-100%)',
-  down:  'translateY(100%)',
-  left:  'translateX(-100%)',
-  right: 'translateX(100%)',
-};
+/* ================= build DOM ================= */
+const cube = document.getElementById('cube'), pages = document.getElementById('pages');
+const faceEl = {}, setEl = {};
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const img = (src, alt='') => `<img data-src="${src}" alt="${esc(alt)}" decoding="async" draggable="false">`;
+let css = '';
 
-/* ================= DOM refs ================= */
-const faceEls = {};
-document.querySelectorAll('.face').forEach(el => faceEls[el.dataset.face] = el);
-const hintEl = document.getElementById('hint');
-const facesWrap = document.getElementById('faces');
-
-/* ================= global title text ================= */
-// eyebrow / title / subtitle per face — the DOM only ever holds one copy
-// of these now (#global-title), swapped on navigation, so the title can
-// live outside #faces (see the CSS comment on #global-title for why).
-const FACE_TEXT = {
-  FRONT:  { eyebrow: "Val's blog presents",       title: 'Val',                subtitle: 'Swipe in any direction to explore the portfolio ; enjoy, follow, comment, like, share etc ;)' },
-  RIGHT:  { eyebrow: 'Art & illustration', title: 'Art', subtitle: 'I draw on paper, then bring the sketches to life with Clip Studio Paint and Blender.' },
-  BACK:   { eyebrow: 'Front-end Design', title: 'UI/UX', subtitle: 'SvelteKit, WordPress / Nicepage, CSS/SCSS, multilingual sites and other stuff so obvious I should not waste your time listing them.' },
-  LEFT:   { eyebrow: 'Backend & Tools',          title: 'Stack',      subtitle: "Python, Next.js / Supabase / Vercel, team scheduling." },
-  TOP:    { eyebrow: 'Projects & links', title: 'Work + Links', subtitle: "AS7 Park · GRG Group · Holographic 3D resume · NawStar — live demos, repos, and more." },
-  BOTTOM: { eyebrow: '3D & interactive', title: 'Web', subtitle: 'Three.js, GLB viewers, holographic resume, web mini-games; a part of me still dreams about working on Game Design!' },
-};
-const globalTitleEl = document.getElementById('global-title');
-const gtEyebrow  = document.getElementById('gt-eyebrow');
-const gtTitle    = document.getElementById('gt-title');
-const gtSubtitle = document.getElementById('gt-subtitle');
-function setGlobalTitleText(faceKey){
-  const t = FACE_TEXT[faceKey] || FACE_TEXT.FRONT;
-  gtEyebrow.textContent  = t.eyebrow;
-  gtTitle.textContent    = t.title;
-  gtSubtitle.textContent = t.subtitle;
-}
-
-/* =========================================================================
-   ============================  CUBE_CONFIG  =============================
-   =========================================================================
-   THE ONLY THING TO EDIT. One entry per cube face (FRONT / BACK / LEFT /
-   RIGHT / TOP / BOTTOM). Just type a filename — the image must sit next
-   to this HTML file (same folder, "root"). Leave a string empty ('') for
-   "no image":
-     - empty fond   -> that face of the cube stays the plain halftone/BD
-                       shader (no texture), nothing breaks.
-     - empty layer  -> that parallax layer is simply not drawn (transparent).
-
-   fond    : one image, mapped flat onto that face of the 3D cube itself.
-   layers  : exactly 4 images for the parallax stack shown over the text,
-             ordered foreground -> background (layers[0] moves the most
-             under the mouse, layers[3] the least).
-   ========================================================================= */
-const CUBE_CONFIG = {
-  FRONT:  { fond: 'front-fond.webp', layers: ['front-1.webp', 'front-2.webp', 'front-3.webp', 'front-4.webp'] },
-  RIGHT:  { fond: 'right-fond.webp', layers: ['right-1.webp', '', 'right-3.webp', ''] },
-  BACK:   { fond: '', layers: ['', '', '', ''] },
-  LEFT:   { fond: '', layers: ['', '', '', ''] },
-  TOP:    { fond: '', layers: ['', '', '', ''] },
-  BOTTOM: { fond: '', layers: ['', '', '', ''] },
-};
-/* ========================================================================= */
-
-// sanity check: every face must reserve exactly 4 layer slots (empty
-// strings are fine, a missing/short array is not) — catches a stray
-// comma or a forgotten entry immediately in the console instead of
-// silently dropping a layer
-Object.entries(CUBE_CONFIG).forEach(([faceKey, cfg]) => {
-  if (!cfg || !Array.isArray(cfg.layers) || cfg.layers.length !== 4) {
-    console.warn(`[CUBE_CONFIG] ${faceKey}: expected exactly 4 layers, got`, cfg && cfg.layers);
+function itemHTML(it, i, k){
+  css += `.set[data-face="${k}"] .it-${i}{${it.at||''}}@media (min-aspect-ratio:1/1){.set[data-face="${k}"] .it-${i}{${it.atL ? 'left:auto;right:auto;top:auto;bottom:auto;width:auto;' + it.atL : it.at||''}}}`;
+  let inner = '';
+  if (it.type === 'caption'){
+    const t = it.tag || 'h2';
+    inner = `<div class="eyebrow">${esc(it.eyebrow||'')}</div>${it.title?`<${t}>${it.title}</${t}>`:''}${it.text?`<p>${esc(it.text)}</p>`:''}`;
+  } else if (it.type === 'bubble' || it.type === 'sfx'){
+    inner = esc(it.text);
+  } else if (it.type === 'grid'){
+    inner = it.cases.map(c => `<div class="case">${c.src ? `<div class="case-art" style="--pos:${c.pos||'50% 50%'}">${img(c.src, c.alt)}</div>` : `<span class="yr" aria-hidden="true">${esc(c.yr)}</span>`}<div class="cap"><small>${esc(c.yr)}</small><b>${esc(c.title)}</b></div>${c.todo?`<div class="todo">${esc(c.todo)}</div>`:''}${c.ico?`<div class="case-ico">${c.ico.map(i => img(i, '')).join('')}</div>`:''}</div>`).join('');
+  } else if (it.type === 'links' || it.type === 'cta'){
+    inner = it.links.map(l => `<a class="${it.type === 'cta' ? 'go' : 'btn'} ${l.cls||''}" href="${l.href}" ${l.href.startsWith('http')?'target="_blank" rel="noopener"':''}>${esc(l.text)}</a>`).join('');
+  } else if (it.type === 'char'){
+    inner = `${img(it.src, it.alt)}<span class="fig">${esc(it.label||'')}</span>`;
+  } else if (it.type === 'icon'){
+    inner = img(it.src, it.alt);
+  } else if (it.type === 'pin'){
+    inner = `${img(it.src, it.alt)}<span class="fig">${esc(it.label||'')}</span>`;
+  } else if (it.type === 'sticker' || it.type === 'big'){
+    inner = it.text;
   }
-});
-
-/* ================= parallax drawing layers =================
-   Builds the 4-layer DOM stack for a face from CUBE_CONFIG[faceKey].layers.
-   Revealed via the same .content-in cascade as the text, in lockstep
-   with the face's own slide (see navigate()).
-   ==================================================================== */
-const DEPTHS = [
-  { depth:18, delay:0.05, layerIndex:3 },
-  { depth:40, delay:0.13, layerIndex:2 },
-  { depth:65, delay:0.21, layerIndex:1 },
-  { depth:95, delay:0.29, layerIndex:0 },
-];
-function buildDrawing(faceKey){
-  const layers = (CUBE_CONFIG[faceKey] && CUBE_CONFIG[faceKey].layers) || [];
-  let html = '';
-  DEPTHS.forEach(d => {
-    const src = layers[d.layerIndex];
-    // --layer-src feeds .layer-art's background-image via CSS (var()),
-    // rather than setting background-image directly inline — that way
-    // the FRONT depth rules in CSS can still add a second background
-    // layer (the light gradient, via background-blend-mode) without an
-    // inline style fighting them on specificity.
-    const bg = src ? ` style="--layer-src:url('${src}')"` : '';
-    // .layer-shadow is a plain duplicate of the same art, tinted solid
-    // black via brightness(0) (a cheap filter — nothing like the blur
-    // cost of drop-shadow) and offset behind .layer-art via transform.
-    // Still respects the art's own alpha silhouette, just with a hard
-    // edge instead of a soft blurred one — which reads as a deliberate
-    // flat BD/manga shadow rather than a compromise.
-    html += `<div class="layer" data-depth="${d.depth}" data-delay="${d.delay}"><div class="layer-inner"><div class="layer-shadow"${bg}></div><div class="layer-art"${bg}></div></div></div>`;
-  });
-  return html;
+  return `<div class="it it-${i} ${it.type} ${it.cls||''}" data-depth="${it.depth||10}" style="--rot:${it.rot||0}deg"><div class="pp">${inner}</div></div>`;
 }
-document.querySelectorAll('[data-drawing]').forEach(slot => {
-  const faceKey = slot.closest('.face').dataset.face;
-  slot.innerHTML = buildDrawing(faceKey);
-});
+for (const k in FACES){
+  const f = FACES[k];
+  const fe = document.createElement('div');
+  fe.className = 'face'; fe.dataset.face = k;
+  if (f.bg) fe.innerHTML = `<div class="bg">${img(f.bg)}</div>`;
+  cube.appendChild(fe); faceEl[k] = fe;
 
-// cache each face's 4 .layer-inner elements (+ their depth) once, up
-// front — updateLayerParallax() runs every animation frame, so doing
-// querySelectorAll/querySelector from scratch there (as it did before)
-// meant 8+ DOM queries, 60 times a second, for no reason: the layers
-// never change after this point, only which face is "current" does.
-const faceLayerInners = {};
-Object.keys(faceEls).forEach(faceKey=>{
-  faceLayerInners[faceKey] = Array.from(
-    faceEls[faceKey].querySelectorAll('.drawing-layers .layer')
-  ).map(layer => ({
-    depth: parseFloat(layer.dataset.depth || '20'),
-    inner: layer.querySelector('.layer-inner'),
-  })).filter(l => l.inner);
-});
-
-
-let current = 'FRONT';
-faceEls[current].classList.add('visible');
-faceEls[current].style.transform = 'translate(0,0)';
-setGlobalTitleText(current);
-requestAnimationFrame(()=> {
-  faceEls[current].classList.add('content-in');
-  globalTitleEl.classList.add('content-in');
-});
-
-let locked = false;
-// 0..1 ramp, eased up from 0 each time a face becomes current so the
-// parallax offset fades in smoothly instead of snapping to the current
-// mouse position the instant the slide-in transition finishes. Declared
-// here (top-level, before navigate()) rather than down by the mouse
-// tracking code so it's always initialized even if something later in
-// setup (e.g. WebGL) throws before reaching that point.
-let parallaxIntensity = 0;
-let _parallaxFrameToggle = false; // halves the parallax update rate, see animate()
-const targetQuat = new THREE.Quaternion();
-
-const LAYER_AXIS = { up:'Y', down:'Y', left:'X', right:'X' };
-// same sign as IN_START/OUT below — layers move in lockstep with the face
-const ENTER_SIGN = { up:-1, down:1, left:-1, right:1 }; // mirrors IN_START
-const EXIT_SIGN  = { up:1,  down:-1, left:1,  right:-1 }; // mirrors OUT
-
-function layerTransition(delay){
-  return `transform .68s cubic-bezier(.22,.61,.36,1) ${delay}s, opacity .45s ease ${delay}s`;
+  if (f.pos) css += `.set[data-face="${k}"] .ly img{object-position:${f.pos.p}}@media (min-aspect-ratio:1/1){.set[data-face="${k}"] .ly img{object-position:${f.pos.l}}}`;
+  const se = document.createElement('section');
+  se.className = 'set'; se.dataset.face = k; se.setAttribute('aria-hidden', 'true');
+  se.innerHTML =
+    (f.layers||[]).map((l, i, a) => `<div class="ly ${l.over ? 'over' : ''}" data-depth="${l.depth}">${img(l.src, i === a.length-1 ? 'Val at his desk, drawing, posters on the wall' : '')}</div>`).join('') +
+    `<svg class="notes" aria-hidden="true"></svg>` +
+    (f.items||[]).map((it, i) => itemHTML(it, i, k)).join('');
+  pages.appendChild(se); setEl[k] = se;
 }
+document.head.insertAdjacentHTML('beforeend', `<style>${css}</style>`);
+const loadImgs = root => root.querySelectorAll('img[data-src]').forEach(i => { i.src = i.dataset.src; i.removeAttribute('data-src'); });
 
-function layerTranslate(dir, sign, depth){
-  const axis = LAYER_AXIS[dir];
-  const val = (sign * depth) + '%';
-  return axis === 'X' ? `translate(${val},0)` : `translate(0,${val})`;
+/* ================= technical annotations ================= */
+function mapper(k){
+  const f = FACES[k], W = innerWidth, H = innerHeight;
+  if (f.notes.space === 'scene'){
+    const [iw, ih] = f.img, s = Math.max(W / iw, H / ih);
+    const [px, py] = getComputedStyle(setEl[k].querySelector('.ly img')).objectPosition.split(' ').map(v => parseFloat(v) / 100);
+    const ox = (W - iw*s) * px, oy = (H - ih*s) * py;
+    return { pt:([x, y]) => [ox + x/100*iw*s, oy + y/100*ih*s], len: r => r/100*iw*s };
+  }
+  const S = cube.offsetWidth, ox = (W - S) / 2, oy = (H - S) / 2;
+  return { pt:([x, y]) => [ox + x/100*S, oy + y/100*S], len: r => r/100*S };
 }
-
-// place a face's layers at their start position, instantly (no transition) —
-// used right before the entrance animation begins
-function primeLayersAtStart(faceEl, dir){
-  faceEl.querySelectorAll('.drawing-layers .layer').forEach(layer=>{
-    layer.style.transition = 'none';
-    const depth = parseFloat(layer.dataset.depth || '20');
-    layer.style.transform = layerTranslate(dir, ENTER_SIGN[dir], depth);
-  });
-}
-
-// animate a face's layers to their resting position (translate(0,0)),
-// each with its own delay — background arrives first, foreground last
-function animateLayersIn(faceEl){
-  faceEl.querySelectorAll('.drawing-layers .layer').forEach(layer=>{
-    const delay = parseFloat(layer.dataset.delay || '0');
-    layer.style.transition = layerTransition(delay);
-    layer.style.transform = 'translate(0,0)';
-  });
-}
-
-// animate a face's layers out toward the exit side, same per-layer delay logic
-function animateLayersOut(faceEl, dir){
-  faceEl.querySelectorAll('.drawing-layers .layer').forEach(layer=>{
-    const delay = parseFloat(layer.dataset.delay || '0');
-    layer.style.transition = layerTransition(delay);
-    const depth = parseFloat(layer.dataset.depth || '20');
-    layer.style.transform = layerTranslate(dir, EXIT_SIGN[dir], depth);
-  });
-}
-
-function resetLayerTransforms(faceEl){
-  faceEl.querySelectorAll('.drawing-layers .layer').forEach(layer=>{
-    layer.style.transition = 'none';
-    layer.style.transform = '';
-  });
-}
-
-function navigate(dir){
-  if (locked) return;
-
-  const axis  = (dir === 'up' || dir === 'down') ? AXIS_X : AXIS_Y;
-  const angle = (dir === 'down' || dir === 'right') ? -ROT : ROT;
-  const delta = new THREE.Quaternion().setFromAxisAngle(axis, angle);
-  targetQuat.premultiply(delta);
-
-  const next = frontFaceFromQuat(targetQuat);
-  locked = true;
-  hintEl.classList.add('hidden');
-
-  // the title now lives outside #faces as a single shared element, so it
-  // can't crossfade two independent copies like the slides do — fade the
-  // old text out first, swap it once it's gone, then fade the new text in
-  globalTitleEl.classList.remove('content-in');
-  setTimeout(()=>{
-    setGlobalTitleText(next);
-    globalTitleEl.classList.add('content-in');
-  }, 500);
-
-  const curEl = faceEls[current];
-  const nxtEl = faceEls[next];
-
-  primeLayersAtStart(nxtEl, dir);
-
-  nxtEl.classList.remove('content-in');
-  nxtEl.style.transition = 'none';
-  nxtEl.style.transform = IN_START[dir];
-  nxtEl.classList.add('visible');
-  nxtEl.style.zIndex = 3;
-  curEl.style.zIndex = 2;
-
-  requestAnimationFrame(()=>{
-    requestAnimationFrame(()=>{
-      const ease = 'transform .62s cubic-bezier(.22,.61,.36,1), opacity .62s ease';
-      nxtEl.style.transition = ease;
-      curEl.style.transition = ease;
-      nxtEl.style.transform = 'translate(0,0)';
-      curEl.style.transform = OUT[dir];
-      curEl.style.opacity = '0';
-      nxtEl.classList.add('content-in');
-      animateLayersIn(nxtEl);
-      animateLayersOut(curEl, dir);
-    });
-  });
-
-  setTimeout(()=>{
-    curEl.classList.remove('visible','content-in');
-    curEl.style.opacity = '1';
-    curEl.style.zIndex = 1;
-    resetLayerTransforms(curEl);
-    current = next;
-    parallaxIntensity = 0; // ease the new face's parallax in from zero
-                            // instead of snapping straight to whatever
-                            // offset the current mouse position implies
-    locked = false;
-  }, 1000);
-}
-
-/* ================= input: swipe / wheel / keys ================= */
-const THRESH = 42;
-let sx=0, sy=0, tracking=false;
-
-window.addEventListener('touchstart', (e)=>{
-  tracking = true;
-  sx = e.touches[0].clientX; sy = e.touches[0].clientY;
-}, {passive:true});
-
-window.addEventListener('touchmove', (e)=>{
-  e.preventDefault();
-}, {passive:false});
-
-window.addEventListener('touchend', (e)=>{
-  if (!tracking) return;
-  tracking = false;
-  const t = e.changedTouches[0];
-  const dx = t.clientX - sx, dy = t.clientY - sy;
-  const adx = Math.abs(dx), ady = Math.abs(dy);
-  if (Math.max(adx, ady) < THRESH) return;
-  if (adx > ady) navigate(dx < 0 ? 'right' : 'left');
-  else           navigate(dy < 0 ? 'down'  : 'up');
-}, {passive:true});
-
-let wheelLock = false;
-window.addEventListener('wheel', (e)=>{
-  e.preventDefault();
-  if (wheelLock) return;
-  const adx = Math.abs(e.deltaX), ady = Math.abs(e.deltaY);
-  if (Math.max(adx, ady) < 8) return;
-  wheelLock = true;
-  setTimeout(()=> wheelLock = false, 550);
-  if (adx > ady) navigate(e.deltaX > 0 ? 'right' : 'left');
-  else           navigate(e.deltaY > 0 ? 'down'  : 'up');
-}, {passive:false});
-
-window.addEventListener('keydown', (e)=>{
-  const map = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
-  if (map[e.key]){ e.preventDefault(); navigate(map[e.key]); }
-});
-
-document.querySelectorAll('.arrow').forEach(el=>{
-  const dir = ['up','down','left','right'].find(d => el.classList.contains(d));
-  el.addEventListener('click', ()=> navigate(dir));
-});
-
-/* ================= Three.js: single cube, tech shader, background only ================= */
-const canvasWrap = document.getElementById('canvas-wrap');
-const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-canvasWrap.appendChild(renderer.domElement);
-
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xffffff);
-scene.fog = new THREE.Fog(0x000000, 6, 18);
-
-const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-
-const CUBE_SIZE = 2.3;
-const geo = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
-
-/* manga/BD shader: white "paper" faces, halftone screentone dots for
-   shading (density driven by a slow-moving ink wash + edge fresnel),
-   strict black & white only, unlit on purpose */
-const cubeMat = new THREE.ShaderMaterial({
-  transparent:false,
-  side: THREE.DoubleSide,
-  uniforms:{ uTime:{ value:0 } },
-  vertexShader:`
-    varying vec3 vNormal;
-    varying vec3 vViewPos;
-    varying vec2 vUv;
-    void main(){
-      vUv = uv;
-      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-      vViewPos = -mvPosition.xyz;
-      vNormal = normalize(normalMatrix * normal);
-      gl_Position = projectionMatrix * mvPosition;
+function drawNotes(k){
+  const f = FACES[k], svg = setEl[k].querySelector('.notes');
+  if (!f.notes){ svg.innerHTML = ''; return; }
+  const m = mapper(k), W = innerWidth;
+  const P = pts => 'M' + pts.map(p => p.map(v => v.toFixed(1)).join(' ')).join('L');
+  let out = '';
+  const H = innerHeight, inView = ([x, y]) => x > 8 && x < W - 8 && y > 8 && y < H - 8;
+  for (const n of f.notes.list){
+    // skip annotations whose anchor falls off-screen (phones crop the drawing)
+    if (n.k === 'lead' && !(inView(m.pt(n.p)) && inView(m.pt(n.t)))) continue;
+    if (n.k === 'lead' && (m.pt(n.t)[0] < W*.6 ? m.pt(n.t)[0] + 31 + n.label.length*7.2 > W : m.pt(n.t)[0] - 31 - n.label.length*7.2 < 0)) continue;
+    if (n.k === 'dim' && !(inView(m.pt(n.a)) && inView(m.pt(n.b)))) continue;
+    if (n.k === 'cross' && !inView(m.pt(n.p))) continue;
+    if (n.k === 'dim'){
+      const a = m.pt(n.a), b = m.pt(n.b), dx = b[0]-a[0], dy = b[1]-a[1], L = Math.hypot(dx, dy) || 1;
+      const u = [dx/L, dy/L]; let nn = [-u[1], u[0]]; if (nn[1] > 0) nn = [-nn[0], -nn[1]];
+      const tick = p => P([[p[0]+nn[0]*7, p[1]+nn[1]*7], [p[0]-nn[0]*7, p[1]-nn[1]*7]]);
+      const head = (p, s) => P([[p[0]+s*u[0]*9+nn[0]*3, p[1]+s*u[1]*9+nn[1]*3], p, [p[0]+s*u[0]*9-nn[0]*3, p[1]+s*u[1]*9-nn[1]*3]]);
+      out += `<path class="ln" d="${P([a,b])}"/><path class="ln" d="${tick(a)}"/><path class="ln" d="${tick(b)}"/><path class="ln" d="${head(a,1)}"/><path class="ln" d="${head(b,-1)}"/>`;
+      const mx = (a[0]+b[0])/2 + nn[0]*9, my = (a[1]+b[1])/2 + nn[1]*9, ang = Math.atan2(dy, dx) * 180 / Math.PI;
+      out += `<text x="${mx}" y="${my}" text-anchor="middle" transform="rotate(${Math.abs(ang) > 90 ? ang+180 : ang} ${mx} ${my})">${esc(n.label||'')}</text>`;
+    } else if (n.k === 'lead'){
+      const p = m.pt(n.p), t = m.pt(n.t), right = t[0] < W * .6, e = [t[0] + (right ? 26 : -26), t[1]];
+      out += `<circle class="dot" cx="${p[0]}" cy="${p[1]}" r="2.6"/><path class="ln" d="${P([p, t, e])}"/>`;
+      out += `<text x="${e[0] + (right ? 5 : -5)}" y="${e[1] + 3.5}" text-anchor="${right ? 'start' : 'end'}">${esc(n.label)}</text>`;
+    } else if (n.k === 'circ'){
+      const c = m.pt(n.c);
+      out += `<circle class="ln ${n.dashed ? 'dash' : ''}" cx="${c[0]}" cy="${c[1]}" r="${m.len(n.r)}"/>`;
+    } else if (n.k === 'cross'){
+      const [x, y] = m.pt(n.p);
+      out += `<circle class="ln" cx="${x}" cy="${y}" r="6"/><path class="ln" d="M${x-11} ${y}L${x+11} ${y}M${x} ${y-11}L${x} ${y+11}"/>`;
+    } else if (n.k === 'hline'){
+      const y = m.pt([0, n.y])[1];
+      out += `<path class="ln dash" d="M0 ${y}L${W} ${y}"/><text x="10" y="${y - 6}">${esc(n.label||'')}</text>`;
     }
-  `,
-  fragmentShader:`
-    uniform float uTime;
-    varying vec3 vNormal;
-    varying vec3 vViewPos;
-    varying vec2 vUv;
+  }
+  svg.innerHTML = out;
+}
+function animateNotes(k, delay){
+  const svg = setEl[k].querySelector('.notes');
+  const lines = [...svg.querySelectorAll('.ln:not(.dash)')], rest = svg.querySelectorAll('.dash, .dot, text');
+  lines.forEach(l => { const L = l.getTotalLength(); l.style.strokeDasharray = L; l.style.strokeDashoffset = L; });
+  gsap.to(lines, { strokeDashoffset:0, duration:.7, ease:'power2.inOut', stagger:.035, delay });
+  gsap.fromTo(rest, { opacity:0 }, { opacity:1, duration:.5, stagger:.04, delay:delay + .35 });
+}
 
-    void main(){
-      vec3 viewDir = normalize(vViewPos);
-      float fresnel = pow(1.0 - clamp(dot(normalize(vNormal), viewDir), 0.0, 1.0), 2.4);
+/* ================= cube state & render ================= */
+let half = 0, qT = [0,0,0,1], qD = [0,0,0,1], current = 'FRONT', rollTween = null;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function layout(){
+  half = cube.offsetWidth / 2;
+  for (const k in faceEl) faceEl[k].style.transform = `${qCss(FACE_Q[k])} translateZ(${half}px)`;
+  drawNotes(current);
+}
+layout(); addEventListener('resize', layout);
 
-      // slow travelling ink wash — adds shade as it sweeps the panel
-      float wash = 0.5 + 0.5*sin(vUv.y*3.0 - uTime*0.35 + vUv.x*1.5);
-      wash = smoothstep(0.35, 0.95, wash);
-
-      float shade = clamp(fresnel*0.85 + wash*0.35, 0.0, 1.0);
-
-      // halftone screentone: dot radius grows with local shade
-      vec2 grid = fract(vUv * 26.0) - 0.5;
-      float dist = length(grid);
-      float dotRadius = shade * 0.62;
-      float dot = 1.0 - smoothstep(dotRadius - 0.05, dotRadius, dist);
-
-      vec3 paper = vec3(1.0);
-      vec3 ink = vec3(0.0);
-      vec3 color = mix(paper, ink, dot);
-
-      gl_FragColor = vec4(color, 1.0);
-    }
-  `,
+gsap.ticker.add(time => {
+  const w = reduce ? [0,0,0,1] : qMul(qAxis(AX, Math.sin(time*.3)*.03), qAxis(AY, Math.sin(time*.22)*.04));
+  cube.style.transform = `translateZ(${-half}px) ${qCss(qMul(w, qD))}`;
 });
 
-// per-face materials: BoxGeometry's default UV groups are ordered
-// [+x, -x, +y, -y, +z, -z], which is exactly RIGHT/LEFT/TOP/BOTTOM/FRONT/BACK
-// (see LOCAL_AXES above) — faces with a "fond" get a plain textured
-// material, everything else keeps the shared halftone shader
-const MATERIAL_FACE_ORDER = ['RIGHT','LEFT','TOP','BOTTOM','FRONT','BACK'];
-const textureLoader = new THREE.TextureLoader();
-const fondTextures = [];
-const cubeMaterials = MATERIAL_FACE_ORDER.map(faceKey => {
-  const fondPath = CUBE_CONFIG[faceKey] && CUBE_CONFIG[faceKey].fond;
-  if (!fondPath) return cubeMat; // no fond configured -> plain halftone shader
-  const tex = textureLoader.load(fondPath);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.center.set(0.5, 0.5);
-  fondTextures.push({
-    faceKey,
-    texture: tex,
-    localNormal: LOCAL_AXES.find(axis => axis.label === faceKey).v.clone(),
-    localUp: new THREE.Vector3(0, 1, 0),
-  });
-  return new THREE.MeshBasicMaterial({ map: tex });
+function prepareFace(k, q){
+  loadImgs(faceEl[k]); loadImgs(setEl[k]);
+  const bg = faceEl[k].querySelector('.bg');
+  if (bg) bg.style.transform = `rotate(${uprightDeg(q, k)}deg)`;
+}
+function animateTo(q, dur, ease){
+  if (rollTween) rollTween.kill();
+  const from = qD.slice(), o = { t:0 };
+  rollTween = gsap.to(o, { t:1, duration:reduce ? 0 : dur, ease, onUpdate(){ qD = qSlerp(from, q, o.t); } });
+}
+
+/* ================= pages: enter / exit (layers slide with the cube, by depth) ================= */
+const OFF = { right:[1,0], left:[-1,0], down:[0,1], up:[0,-1] };   // where the new page comes from
+const parts = k => [...setEl[k].querySelectorAll('.ly, .it')];
+function offset(el, [ox, oy], sign){
+  const d = +el.dataset.depth;
+  return el.classList.contains('ly')
+    ? { xPercent:ox*d*sign, yPercent:oy*d*sign, x:0, y:0 }               // like the original: depth% of the screen
+    : { x:ox*(80 + d*12)*sign, y:oy*(80 + d*12)*sign, xPercent:0, yPercent:0 };
+}
+function exitPage(k, dir){
+  const se = setEl[k], o = OFF[dir];
+  gsap.killTweensOf(parts(k));
+  gsap.to(se.querySelector('.notes'), { opacity:0, duration:.2 });
+  parts(k).forEach(el => gsap.to(el, { ...offset(el, o, -1), opacity:0, duration:reduce ? 0 : .55, ease:'power2.in' }));
+  gsap.delayedCall(reduce ? 0 : .6, () => { if (k !== current){ se.classList.remove('on'); se.setAttribute('aria-hidden','true'); } });
+}
+function enterPage(k, dir){
+  const se = setEl[k], o = OFF[dir];
+  se.classList.add('on'); se.removeAttribute('aria-hidden');
+  gsap.killTweensOf(parts(k));
+  drawNotes(k);
+  gsap.set(se.querySelector('.notes'), { opacity:1 });
+  if (reduce){ gsap.set(parts(k), { x:0, y:0, xPercent:0, yPercent:0, opacity:1 }); return; }
+  // background layers first, foreground last — the original cascade
+  parts(k).sort((a, b) => a.dataset.depth - b.dataset.depth).forEach((el, i) =>
+    gsap.fromTo(el, { ...offset(el, o, 1), opacity:0 }, { x:0, y:0, xPercent:0, yPercent:0, opacity:1, duration:.8, ease:'power3.out', delay:.05 + i * .07 }));
+  const bub = se.querySelectorAll('.bubble .pp'), sfx = se.querySelectorAll('.sfx .pp, .icon .pp');
+  if (bub.length) gsap.fromTo(bub, { scale:0 }, { scale:1, duration:.5, ease:'back.out(2.6)', stagger:.1, delay:.55,
+    transformOrigin:(i, el) => el.parentNode.classList.contains('r') ? '82% 120%' : el.parentNode.classList.contains('l') ? '-10% 40%' : '18% 120%' });
+  if (sfx.length) gsap.fromTo(sfx, { scale:0, opacity:0 }, { scale:1, opacity:1, duration:.45, ease:'back.out(2.4)', delay:.6, stagger:.07 });
+  animateNotes(k, .7);
+}
+
+/* ================= navigation ================= */
+function roll(dir, fromDrag){
+  const [ax, a] = ROLL[dir];
+  qT = qSnap(qMul(qAxis(ax, a), qT));
+  const next = frontFace(qT);
+  prepareFace(next, qT);
+  if (next !== current){ const prev = current; current = next; exitPage(prev, dir); enterPage(next, dir); }
+  animateTo(qT, fromDrag ? .5 : .8, fromDrag ? 'power2.out' : 'power3.inOut');
+}
+
+const KEYS = { ArrowRight:'right', ArrowLeft:'left', ArrowDown:'down', ArrowUp:'up' };
+addEventListener('keydown', e => { if (KEYS[e.key] && !dlg.open){ e.preventDefault(); roll(KEYS[e.key]); } });
+let wheelLock = 0;
+addEventListener('wheel', e => {
+  if (dlg.open) return;
+  e.preventDefault();
+  const now = performance.now(), ax = Math.abs(e.deltaX), ay = Math.abs(e.deltaY);
+  if (now < wheelLock || Math.max(ax, ay) < 8) return;
+  wheelLock = now + 750;
+  roll(ax > ay ? (e.deltaX > 0 ? 'right' : 'left') : (e.deltaY > 0 ? 'down' : 'up'));
+}, { passive:false });
+document.querySelectorAll('.arrow').forEach(b => b.addEventListener('click', () => roll(['up','down','left','right'].find(d => b.classList.contains(d)))));
+
+// drag: the cube and the page follow the finger, then commit or spring back
+const fine = matchMedia('(pointer:fine)').matches;
+if (fine) document.body.classList.add('grab');
+let drag = null;
+addEventListener('pointerdown', e => {
+  if (dlg.open || e.button > 0 || e.target.closest('button, a, dialog')) return;
+  drag = { x0:e.clientX, y0:e.clientY, axis:null, a:0, sign:0, vx:0, vy:0, lx:e.clientX, ly:e.clientY, lt:performance.now() };
+  document.body.classList.add('grabbing');
 });
-
-const cube = new THREE.Mesh(geo, cubeMaterials);
-scene.add(cube);
-
-// thick black border via the inverted-hull outline trick: a slightly
-// enlarged duplicate mesh, black, rendered back-face-only — GL line
-// widths are unreliable across browsers, this reads as a bold BD
-// panel border reliably everywhere
-const outlineMat = new THREE.MeshBasicMaterial({ color:0x000000, side:THREE.BackSide });
-const outline = new THREE.Mesh(geo, outlineMat);
-outline.scale.setScalar(1.06);
-cube.add(outline);
-
-// per-face contour: the inverted-hull outline above only draws along the
-// cube's outer silhouette, so when a wobble tilt reveals a second/third
-// face, the seam between two visible faces stays borderless. Drawing the
-// 12 real cube edges on top fixes that — every face keeps its own black
-// contour no matter the angle. Scaled up a hair to avoid z-fighting with
-// the face materials underneath.
-const edgesGeo = new THREE.EdgesGeometry(geo);
-const edgesMat = new THREE.LineBasicMaterial({ color:0x000000 });
-const edges = new THREE.LineSegments(edgesGeo, edgesMat);
-edges.scale.setScalar(1.001);
-cube.add(edges);
-
-/* renderer-specific responsiveness: recompute size, aspect and camera fit
-   independently from the DOM layout, on every resize / orientation change */
-function fitScene(){
-  const w = window.innerWidth, h = window.innerHeight;
-  renderer.setSize(w, h);
-  camera.aspect = w / h;
-
-  // fit by height only — on narrow/portrait screens the cube is allowed
-  // to bleed past the left/right edges rather than shrinking to stay
-  // fully contained; it's a background element, not a framed object
-  const margin = 1.55;
-  const vFov = camera.fov * Math.PI/180;
-  const distForH = (CUBE_SIZE*margin/2) / Math.tan(vFov/2);
-
-  camera.position.set(0, 0, distForH);
-  camera.lookAt(0,0,0);
-  camera.updateProjectionMatrix();
-}
-fitScene();
-
-window.addEventListener('resize', fitScene);
-window.addEventListener('orientationchange', fitScene);
-if (window.visualViewport){
-  window.visualViewport.addEventListener('resize', fitScene);
-}
-
-const clock = new THREE.Clock();
-const _q = new THREE.Quaternion();
-const _e = new THREE.Euler();
-const _fondNormal = new THREE.Vector3();
-const _fondImageUp = new THREE.Vector3();
-const _fondReferenceUp = new THREE.Vector3();
-const _fondCross = new THREE.Vector3();
-
-// Counter-rotate fond maps around their face normal so their image stays
-// upright relative to the viewport while the cube rolls underneath them.
-function updateFondOrientations(){
-  for (const fond of fondTextures){
-    _fondNormal.copy(fond.localNormal).applyQuaternion(cube.quaternion).normalize();
-    _fondImageUp.copy(fond.localUp).applyQuaternion(cube.quaternion).normalize();
-    _fondReferenceUp.set(0, 1, 0).projectOnPlane(_fondNormal);
-
-    // A face pointing straight up or down has no unique screen-up vector;
-    // leave its last stable angle until it becomes visible again.
-    if (_fondReferenceUp.lengthSq() < 0.0001) continue;
-    _fondReferenceUp.normalize();
-    const angle = Math.atan2(
-      _fondNormal.dot(_fondCross.crossVectors(_fondImageUp, _fondReferenceUp)),
-      _fondImageUp.dot(_fondReferenceUp),
-    );
-    fond.texture.rotation = angle;
+addEventListener('pointermove', e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0, now = performance.now(), dt = Math.max(1, now - drag.lt);
+  drag.vx = (e.clientX - drag.lx) / dt; drag.vy = (e.clientY - drag.ly) / dt; drag.lx = e.clientX; drag.ly = e.clientY; drag.lt = now;
+  if (!drag.axis){
+    if (Math.hypot(dx, dy) < 10) return;
+    drag.axis = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+    if (rollTween) rollTween.kill();
+    qD = qT.slice();
+  }
+  const d = drag.axis === 'h' ? dx : dy;
+  drag.a = gsap.utils.clamp(-PI2, PI2, (drag.axis === 'h' ? d : -d) / (half * 2) * PI2 * 1.15);
+  const ax = drag.axis === 'h' ? AY : AX;
+  qD = qMul(qAxis(ax, drag.a), qT);
+  const sign = Math.sign(drag.a);
+  if (sign && sign !== drag.sign){ drag.sign = sign; const qn = qSnap(qMul(qAxis(ax, sign*PI2), qT)); prepareFace(frontFace(qn), qn); }
+  const f = Math.abs(drag.a) / PI2;
+  parts(current).forEach(el => gsap.set(el, { x:(drag.axis === 'h' ? d : 0) * el.dataset.depth / 60, y:(drag.axis === 'v' ? d : 0) * el.dataset.depth / 60, opacity:1 - f*.7 }));
+  gsap.set(setEl[current].querySelector('.notes'), { opacity:1 - f*1.5 });
+});
+function endDrag(){
+  if (!drag) return;
+  const d = drag; drag = null;
+  document.body.classList.remove('grabbing');
+  if (!d.axis) return;
+  const v = d.axis === 'h' ? d.vx : -d.vy;
+  const commit = Math.abs(d.a) > PI2 * .28 || (Math.abs(v) > .45 && Math.sign(v) === Math.sign(d.a));
+  if (commit) roll(d.axis === 'h' ? (d.a < 0 ? 'right' : 'left') : (d.a > 0 ? 'down' : 'up'), true);
+  else {
+    animateTo(qT, .5, 'back.out(1.6)');
+    gsap.to(parts(current), { x:0, y:0, opacity:1, duration:.4, ease:'power3.out' });
+    gsap.to(setEl[current].querySelector('.notes'), { opacity:1, duration:.3 });
   }
 }
+addEventListener('pointerup', endDrag);
+addEventListener('pointercancel', endDrag);
 
-// mouse-follow parallax on the drawing layers only — desktop (fine
-// pointer) exclusively, so touch/mobile stays perfectly smooth with
-// zero extra event interference, as specified
-const isDesktop = window.matchMedia('(pointer: fine)').matches;
-let mouseX = 0, mouseY = 0;
-if (isDesktop){
-  window.addEventListener('mousemove', (e)=>{
-    mouseX = (e.clientX / window.innerWidth)  * 2 - 1;
-    mouseY = (e.clientY / window.innerHeight) * 2 - 1;
+// mouse parallax (desktop): drawing layers drift by depth like the original; comic items drift slightly the other way
+if (fine && !reduce){
+  const q = {};
+  for (const k in setEl) q[k] = parts(k).map(el => {
+    const isLy = el.classList.contains('ly'), t = isLy ? el.querySelector('img') : el.querySelector('.pp');
+    return { d:+el.dataset.depth * (isLy ? 1 : -.35), x:gsap.quickTo(t, 'x', { duration:.9, ease:'power3' }), y:gsap.quickTo(t, 'y', { duration:.9, ease:'power3' }) };
   });
-
-  // click-and-drag navigation, additive to the passive mouse-follow
-  // parallax above — same swipe threshold/logic as the touch version,
-  // just driven by mousedown/mouseup instead of touchstart/touchend.
-  // The grab/grabbing cursor is the affordance that this is draggable.
-  document.body.classList.add('grabbable');
-  let dragging = false, dsx = 0, dsy = 0;
-  window.addEventListener('mousedown', (e)=>{
-    dragging = true;
-    dsx = e.clientX; dsy = e.clientY;
-    document.body.classList.add('grabbing');
-  });
-  window.addEventListener('mouseup', (e)=>{
-    if (!dragging) return;
-    dragging = false;
-    document.body.classList.remove('grabbing');
-    const dx = e.clientX - dsx, dy = e.clientY - dsy;
-    const adx = Math.abs(dx), ady = Math.abs(dy);
-    if (Math.max(adx, ady) < THRESH) return;
-    if (adx > ady) navigate(dx < 0 ? 'right' : 'left');
-    else           navigate(dy < 0 ? 'down'  : 'up');
-  });
-  window.addEventListener('mouseleave', ()=>{
-    if (!dragging) return;
-    dragging = false;
-    document.body.classList.remove('grabbing');
+  addEventListener('mousemove', e => {
+    if (drag && drag.axis) return;
+    const mx = e.clientX / innerWidth * 2 - 1, my = e.clientY / innerHeight * 2 - 1;
+    q[current].forEach(o => { o.x(mx * o.d * .12); o.y(my * o.d * .12); });
   });
 }
 
-let _lastParallaxMX = null, _lastParallaxMY = null; // dirty-check state
-function updateLayerParallax(){
-  if (!isDesktop) return;
-  const converged = parallaxIntensity >= 0.999;
-  // skip all DOM writes once the ease-in has converged and the mouse
-  // hasn't actually moved since the last frame — with filter+blend on
-  // these layers, every write forces the browser to redo real work, so
-  // re-setting the exact same offset 60x/sec for a still mouse was pure
-  // waste
-  if (converged && mouseX === _lastParallaxMX && mouseY === _lastParallaxMY) return;
-  _lastParallaxMX = mouseX; _lastParallaxMY = mouseY;
+/* ================= Express résumé ================= */
+const dlg = document.getElementById('express');
+document.getElementById('express-btn').addEventListener('click', () => dlg.showModal());
+dlg.addEventListener('click', e => { if (e.target === dlg || e.target.closest('[data-close]')) dlg.close(); });
 
-  // ease intensity 0 -> 1 (exponential approach, ~0.4s to settle);
-  // stays at 1 once converged so normal mouse tracking is untouched
-  // 0.22 not 0.12 — this now runs at ~30fps instead of 60fps (see
-  // animate()), so the ease factor is roughly doubled to keep the same
-  // real-time convergence speed (~0.4s) as before
-  parallaxIntensity += (1 - parallaxIntensity) * 0.22;
-  const layers = faceLayerInners[current];
-  if (!layers) return;
-  for (let i = 0; i < layers.length; i++){
-    const { depth, inner } = layers[i];
-    const strength = depth / 95 * parallaxIntensity; // normalize against the largest depth value
-    // translate only now (see the CSS note on .layer-inner for why the
-    // rotateX/rotateY tilt was cut) — no more --mrx/--mry to compute
-    inner.style.setProperty('--mx',  (mouseX * strength * 10) + 'px');
-    inner.style.setProperty('--my',  (mouseY * strength * 10) + 'px');
-  }
-}
+/* '#express' links open the résumé */
+document.querySelectorAll('a[href="#express"]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); dlg.showModal(); }));
 
-function animate(){
-  const t = clock.getElapsedTime();
-  cubeMat.uniforms.uTime.value = t;
-
-  // gentle float, purely decorative
-  cube.position.y = Math.sin(t*0.7) * 0.08;
-
-  // roll target orientation + a small living wobble — mouse never touches the cube
-  _e.setFromQuaternion(targetQuat);
-  _e.x += Math.sin(t*0.3)*0.045;
-  _e.y += Math.sin(t*0.22)*0.055;
-  _e.z += Math.cos(t*0.26)*0.035;
-  _q.setFromEuler(_e);
-  cube.quaternion.slerp(_q, 0.08);
-  updateFondOrientations();
-
-  // the parallax doesn't need 60fps to read as smooth — halving its
-  // update rate halves the remaining JS + style-recalc cost for it
-  // without the cube's own animation (still every frame) looking any
-  // different
-  _parallaxFrameToggle = !_parallaxFrameToggle;
-  if (_parallaxFrameToggle) updateLayerParallax();
-
-  renderer.render(scene, camera);
-  requestAnimationFrame(animate);
-}
-animate();
+/* ================= boot ================= */
+prepareFace('FRONT', qT);
+document.fonts.ready.then(() => enterPage('FRONT', 'down'));
+addEventListener('load', () => (window.requestIdleCallback || setTimeout)(() => { for (const k in FACES) prepareFace(k, qT); }));
 </script>
 </body>
 </html>
