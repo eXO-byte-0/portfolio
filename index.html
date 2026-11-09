@@ -60,6 +60,8 @@ body::after{
 .ly img{ width:100%; height:100%; object-fit:cover; }
 .notes{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
 .it{ position:absolute; pointer-events:auto; }
+/* each moving piece gets its own GPU layer: shadows/filters are rasterised once, then only moved */
+.set.on .ly, .set.on .it{ will-change:transform, opacity; }
 .it .pp{ transform:rotate(var(--rot, 0deg)); }
 
 /* technical annotations — grey construction lines & labels */
@@ -589,9 +591,13 @@ function layout(){
 }
 layout(); addEventListener('resize', layout);
 
+// idle wobble only on desktop: on phones it forced a full re-composite every frame (25 fps idle)
+const touch = !matchMedia('(pointer:fine)').matches;
+let lastCss = '';
 gsap.ticker.add(time => {
-  const w = reduce ? [0,0,0,1] : qMul(qAxis(AX, Math.sin(time*.3)*.03), qAxis(AY, Math.sin(time*.22)*.04));
-  cube.style.transform = `translateZ(${-half}px) ${qCss(qMul(w, qD))}`;
+  const w = (reduce || touch) ? [0,0,0,1] : qMul(qAxis(AX, Math.sin(time*.3)*.03), qAxis(AY, Math.sin(time*.22)*.04));
+  const css = `translateZ(${-half}px) ${qCss(qMul(w, qD))}`;
+  if (css !== lastCss){ cube.style.transform = css; lastCss = css; }   // only touch the DOM when it moved
 });
 
 function prepareFace(k, q){
@@ -630,7 +636,7 @@ function enterPage(k, dir){
   if (reduce){ gsap.set(parts(k), { x:0, y:0, xPercent:0, yPercent:0, opacity:1 }); return; }
   // background layers first, foreground last — the original cascade
   parts(k).sort((a, b) => a.dataset.depth - b.dataset.depth).forEach((el, i) =>
-    gsap.fromTo(el, { ...offset(el, o, 1), opacity:0 }, { x:0, y:0, xPercent:0, yPercent:0, opacity:1, duration:.8, ease:'power3.out', delay:.05 + i * .07 }));
+    gsap.fromTo(el, { ...offset(el, o, 1), opacity:0 }, { x:0, y:0, xPercent:0, yPercent:0, opacity:1, duration:touch ? .5 : .8, ease:'power3.out', delay:(touch ? .03 : .05) + i * (touch ? .04 : .07) }));
   const bub = se.querySelectorAll('.bubble .pp'), sfx = se.querySelectorAll('.sfx .pp, .icon .pp');
   if (bub.length) gsap.fromTo(bub, { scale:0 }, { scale:1, duration:.5, ease:'back.out(2.6)', stagger:.1, delay:.55,
     transformOrigin:(i, el) => el.parentNode.classList.contains('r') ? '82% 120%' : el.parentNode.classList.contains('l') ? '-10% 40%' : '18% 120%' });
@@ -645,7 +651,7 @@ function roll(dir, fromDrag){
   const next = frontFace(qT);
   prepareFace(next, qT);
   if (next !== current){ const prev = current; current = next; exitPage(prev, dir); enterPage(next, dir); }
-  animateTo(qT, fromDrag ? .5 : .8, fromDrag ? 'power2.out' : 'power3.inOut');
+  animateTo(qT, fromDrag ? .35 : (touch ? .55 : .8), fromDrag ? 'power2.out' : 'power3.inOut');
 }
 
 const KEYS = { ArrowRight:'right', ArrowLeft:'left', ArrowDown:'down', ArrowUp:'up' };
@@ -681,7 +687,7 @@ addEventListener('pointermove', e => {
     qD = qT.slice();
   }
   const d = drag.axis === 'h' ? dx : dy;
-  drag.a = gsap.utils.clamp(-PI2, PI2, (drag.axis === 'h' ? d : -d) / (half * 2) * PI2 * 1.15);
+  drag.a = gsap.utils.clamp(-PI2, PI2, (drag.axis === 'h' ? d : -d) / (half * 2) * PI2 * (touch ? 1.6 : 1.15));
   const ax = drag.axis === 'h' ? AY : AX;
   qD = qMul(qAxis(ax, drag.a), qT);
   const sign = Math.sign(drag.a);
@@ -696,7 +702,7 @@ function endDrag(){
   document.body.classList.remove('grabbing');
   if (!d.axis) return;
   const v = d.axis === 'h' ? d.vx : -d.vy;
-  const commit = Math.abs(d.a) > PI2 * .28 || (Math.abs(v) > .45 && Math.sign(v) === Math.sign(d.a));
+  const commit = Math.abs(d.a) > PI2 * (touch ? .2 : .28) || (Math.abs(v) > (touch ? .25 : .45) && Math.sign(v) === Math.sign(d.a));
   if (commit) roll(d.axis === 'h' ? (d.a < 0 ? 'right' : 'left') : (d.a > 0 ? 'down' : 'up'), true);
   else {
     animateTo(qT, .5, 'back.out(1.6)');
