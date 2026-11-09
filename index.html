@@ -26,6 +26,9 @@ html,body{
   touch-action:none; overscroll-behavior:none; user-select:none; -webkit-user-select:none;
 }
 img{ display:block; -webkit-user-drag:none; }
+/* drawings can't be right-clicked / long-pressed / dragged out: the click lands on
+   the container, so the browser never offers "open / save image" */
+.face img, .set img{ pointer-events:none; -webkit-touch-callout:none; user-select:none; }
 body.grab{ cursor:grab; } body.grabbing{ cursor:grabbing; }
 
 /* paper grain (static, no blend mode) */
