@@ -13,7 +13,7 @@
              'face' = % of the cube face.
              dim {a,b,label} · lead {p,t,label} · circ {c,r,dashed} · cross {p} · hline {y,label}
    ========================================================================= */
-const MAIL = 'mailto:valentinjasonamour@gmail.com';
+const LINKEDIN = 'https://www.linkedin.com/in/valentin-andrieu-4a79101a6';
 const SAFE_TOP = 'max(12px, env(safe-area-inset-top))';
 const SAFE_BOTTOM = 'max(14px, env(safe-area-inset-bottom))';
 
@@ -29,7 +29,7 @@ const FACES = {
         at:'right:4vw;top:31svh', atL:'right:5vw;top:7svh' },
       { type:'bubble', depth:24, cls:'r', text:'Oh, you scanned it? Come in — swipe any way you like.',
         at:'left:4vw;top:31svh', atL:'right:4vw;top:34svh' },
-      { type:'cta', depth:20, rot:-2, links:[{ href:MAIL, text:'Hire me →' }],
+      { type:'cta', depth:20, rot:-2, links:[{ href:LINKEDIN, text:'Hire me →' }],
         at:`left:4vw;bottom:${SAFE_BOTTOM}`, atL:'left:4vw;bottom:5svh' },
     ],
     notes:{ space:'scene', list:[
@@ -62,7 +62,7 @@ const FACES = {
       { type:'icon', depth:26, rot:7, src:'logo-blender.webp', alt:'Blender', at:'left:58vw;top:39svh;width:12vw', atL:'left:30.5vw;top:17svh;width:min(5vw, 8svh)' },
       { type:'bubble', depth:24, text:'Paper first, then Clip Studio Paint and Blender bring the sketches to life.',
         at:'right:4vw;bottom:22svh', atL:'left:37vw;top:2svh' },
-      { type:'cta', depth:20, rot:2, links:[{ href:`${MAIL}?subject=Illustration`, text:'Commission me →' }],
+      { type:'cta', depth:20, rot:2, links:[{ href:LINKEDIN, text:'Commission me →' }],
         at:`left:4vw;bottom:${SAFE_BOTTOM}`, atL:'left:5vw;bottom:5svh' },
     ],
     notes:{ space:'face', list:[
@@ -111,7 +111,7 @@ const FACES = {
         at:'right:-3vw;top:44svh;width:50vw', atL:'left:-1vw;top:23svh;width:min(30vw, 52svh)' },
       { type:'bubble', depth:24, cls:'r', text:'…and the obvious stuff I won’t waste your time listing.',
         at:'left:4vw;top:71svh', atL:'right:4vw;top:7svh' },
-      { type:'cta', depth:20, rot:-2, links:[{ href:`${MAIL}?subject=Website`, text:'Build my site →' }],
+      { type:'cta', depth:20, rot:-2, links:[{ href:LINKEDIN, text:'Build my site →' }],
         at:`left:4vw;bottom:${SAFE_BOTTOM}`, atL:'left:4vw;bottom:5svh' },
     ],
     notes:{ space:'face', list:[{ k:'cross', p:[10, 40] }, { k:'cross', p:[90, 80] }] },
@@ -132,7 +132,7 @@ const FACES = {
         ] },
       { type:'char', cls:'fig-r', depth:34, src:'char-preh.webp', label:'fig. 8 — the elder', alt:'Character design: a prehistoric elder wearing a horned bull skull, sitting cross-legged',
         at:'right:3vw;top:11svh;width:38vw', atL:'left:-2vw;top:41svh;width:min(29vw, 48svh)' },
-      { type:'cta', depth:20, rot:-2, links:[{ href:MAIL, text:'Say hi →' }, { href:'https://leblogdeval.fr', text:'Blog', cls:'paper' }],
+      { type:'cta', depth:20, rot:-2, links:[{ href:LINKEDIN, text:'Say hi →' }, { href:'https://leblogdeval.fr', text:'Blog', cls:'paper' }],
         at:`left:4vw;bottom:${SAFE_BOTTOM}`, atL:'left:4vw;bottom:5svh' },
     ],
   },
@@ -146,7 +146,7 @@ const FACES = {
         at:'right:4vw;top:24svh', atL:'right:5vw;bottom:30svh' },
       { type:'char', cls:'fig-r behind', depth:34, src:'char-mech.webp', label:'fig. 6 — mech · hard-surface design', alt:'Character design: a heavy grey mech',
         at:'right:-4vw;bottom:12svh;width:44vw', atL:'left:7vw;top:33svh;width:min(26vw, 40svh)' },
-      { type:'cta', depth:20, rot:2, links:[{ href:`${MAIL}?subject=3D%20%2F%20web`, text:'Let’s build it →' }],
+      { type:'cta', depth:20, rot:2, links:[{ href:LINKEDIN, text:'Let’s build it →' }],
         at:`left:4vw;bottom:${SAFE_BOTTOM}`, atL:'left:4vw;bottom:5svh' },
     ],
     notes:{ space:'face', list:[
