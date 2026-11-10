@@ -101,7 +101,7 @@ const FACES = {
       { type:'sticker', cls:'red', depth:16, rot:-5, text:'SvelteKit<br>WordPress<br>SCSS<br>i18n',
         at:'left:5vw;top:30svh', atL:'right:4vw;top:29svh' },
       { type:'pin', depth:22, rot:4, src:'gd-flyer.webp', label:'fig. 9 — event flyer', alt:'Graphic design: comic-style event flyer for a computer club',
-        at:'left:5vw;top:48svh;width:30vw', atL:'right:24vw;bottom:9svh;width:min(14vw, 24svh)' },
+        at:'display:none', atL:'display:block;right:24vw;bottom:9svh;width:min(14vw, 24svh)' }, // hidden on phones
       { type:'icon', depth:26, rot:-8, src:'gd-bug.webp', alt:'Icon: crashed monitor', at:'right:6vw;top:5svh;width:15vw', atL:'display:block;left:30vw;top:5svh;width:min(7vw, 11svh)' },
       { type:'icon', depth:26, rot:6, src:'gd-neutral.webp', alt:'Icon: crash-test dummy face', at:'display:none', atL:'display:block;left:45vw;top:3svh;width:min(6vw, 10svh)' },
       { type:'icon', depth:26, rot:-6, src:'gd-tester.webp', alt:'Icon: smiley with a band-aid', at:'display:none', atL:'display:block;right:30vw;top:6svh;width:min(7vw, 11svh)' },
