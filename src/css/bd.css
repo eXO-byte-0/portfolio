@@ -1,0 +1,293 @@
+/* =====================================================================
+   TOKENS — palette lifted straight from the "I'm the guy" poster
+   ===================================================================== */
+:root{
+  --paper:#ebe4d6;   /* poster paper == laptop screen colour (sampled) */
+  --paper-2:#e2dac9;
+  --ink:#111;
+  --red:#d22123;
+  --pencil:#8fb3dd;  /* non-photo blue, for the "drawing to come" panels */
+  --gutter:clamp(10px, 1.6vw, 22px);
+  --border:3px;
+  --shadow:7px 7px 0 0 var(--ink);
+  --display:'Anton', Impact, 'Arial Narrow', sans-serif;
+  --cond:'Roboto Condensed', 'Arial Narrow', sans-serif;
+  --mono:'IBM Plex Mono', ui-monospace, monospace;
+  --sfx:'Bangers', var(--display);
+  --hand:'Caveat', cursive;
+}
+*{ box-sizing:border-box; }
+html{ background:var(--paper); }
+body{
+  margin:0; overflow-x:hidden; background:var(--paper); color:var(--ink);
+  font-family:var(--cond); -webkit-font-smoothing:antialiased;
+}
+img{ display:block; max-width:100%; }
+a{ color:inherit; }
+
+/* paper grain over everything — static SVG noise, no blend mode (cheap) */
+body::after{
+  content:''; position:fixed; inset:0; z-index:100; pointer-events:none; opacity:.09;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* reading progress — an ink line across the top */
+#progress{
+  position:fixed; top:0; left:0; z-index:90; width:100%; height:4px;
+  background:var(--red); transform-origin:0 50%; transform:scaleX(0);
+}
+
+/* "Express" button: the recruiter's fast lane, always reachable */
+#express-btn{
+  position:fixed; z-index:95; right:14px; bottom:max(14px, env(safe-area-inset-bottom));
+  font:700 13px/1 var(--cond); letter-spacing:.06em; text-transform:uppercase;
+  background:var(--ink); color:var(--paper); border:0; cursor:pointer;
+  padding:11px 14px; box-shadow:4px 4px 0 var(--red);
+  transform:rotate(1.5deg); transition:transform .2s ease, box-shadow .2s ease;
+}
+#express-btn:hover{ transform:rotate(0) translate(-2px,-2px); box-shadow:6px 6px 0 var(--red); }
+#express-btn:focus-visible, .btn:focus-visible{ outline:3px solid var(--red); outline-offset:3px; }
+
+/* =====================================================================
+   SPEECH BUBBLE — shared by the cover and the panels
+   (must stay before the cover rules, which override the tail on phones)
+   ===================================================================== */
+.bubble{
+  position:absolute; z-index:4; max-width:28ch;
+  background:#fff; color:var(--ink); border:3px solid var(--ink);
+  border-radius:26px 34px 22px 36px / 32px 20px 38px 24px;
+  box-shadow:5px 5px 0 var(--ink); padding:.75em 1em .8em;
+  font:800 italic clamp(13px, 1.25vw, 17px)/1.2 var(--cond);
+}
+.bubble::before, .bubble::after{ content:''; position:absolute; width:0; height:0; }
+/* tail pointing down-left (default) */
+.bubble::before{ left:18%; top:100%; border:14px solid transparent; border-top:24px solid var(--ink); border-left-width:4px; }
+.bubble::after{ left:calc(18% + 3px); top:calc(100% - 4px); border:10px solid transparent; border-top:19px solid #fff; border-left-width:2px; }
+/* tail pointing left */
+.bubble.t-left::before{ left:auto; right:100%; top:40%; border:12px solid transparent; border-right:26px solid var(--ink); border-bottom-width:3px; }
+.bubble.t-left::after{ left:auto; right:calc(100% - 4px); top:calc(40% + 4px); border:8px solid transparent; border-right:20px solid #fff; border-bottom-width:2px; }
+/* tail pointing down-right */
+.bubble.t-right::before{ left:auto; right:18%; border-left-width:14px; border-right-width:4px; }
+.bubble.t-right::after{ left:auto; right:calc(18% + 3px); border-left-width:10px; border-right-width:2px; }
+
+/* =====================================================================
+   COVER — the poster, rebuilt as live drawing layers
+   ===================================================================== */
+.cover{ position:relative; height:100vh; height:100svh; overflow:hidden; background:var(--paper); }
+.stage{ position:absolute; inset:0; }
+.plx{ position:absolute; inset:0; pointer-events:none; } /* mouse-parallax wrappers */
+.plx > *{ pointer-events:auto; }
+
+.title{
+  position:absolute; left:4vw; top:2.5svh; margin:0;
+  font-family:var(--display); font-weight:400; text-transform:uppercase;
+  line-height:.84; letter-spacing:-.01em; font-size:min(24vw, 21svh);
+}
+.title .l1{ display:block; color:var(--red); }
+.title .l2{ display:block; color:var(--ink); }
+
+.cover-art{ position:absolute; inset:0; }
+.c-lyr{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:58% 50%; }
+.c-lyr.ph-dots{ opacity:.3; }
+
+.cover .bubble{ font-size:clamp(14px, 2.1svh, 20px); }
+.cover .cover-bubble{ right:4vw; left:auto; top:56svh; max-width:min(26vw, 30ch); }
+
+.meanwhile{
+  position:absolute; left:50%; top:50%; margin:0; opacity:0;
+  transform:translate(-50%,-50%) rotate(-1.5deg);
+  background:var(--paper); border:3px solid var(--ink); box-shadow:6px 6px 0 var(--ink);
+  padding:.4em .7em; font:400 clamp(28px, 5vw, 64px)/1 var(--display); text-transform:uppercase; white-space:nowrap;
+}
+
+.scroll-cue{
+  position:absolute; z-index:6; left:4vw; bottom:2svh;
+  font:500 11px/1 var(--mono); letter-spacing:.25em; text-transform:uppercase; color:var(--paper);
+  background:var(--ink); padding:6px 9px;
+}
+
+@media (min-aspect-ratio:1/1){
+  .title{ font-size:min(27svh, 15vw); }
+}
+@media (max-aspect-ratio:1/1){
+  .cover-art{ top:24svh; }
+  .c-lyr{ object-position:62% 50%; }
+  .title{ font-size:min(22vw, 11svh); }
+  .cover .cover-bubble{ left:4vw; right:auto; top:25svh; max-width:72vw; }
+  /* tail points down toward the character on phones */
+  .cover .cover-bubble::before{ left:18%; right:auto; top:100%; border:14px solid transparent; border-top:24px solid var(--ink); border-left-width:4px; }
+  .cover .cover-bubble::after{ left:calc(18% + 3px); right:auto; top:calc(100% - 4px); border:10px solid transparent; border-top:19px solid #fff; border-left-width:2px; }
+}
+
+/* =====================================================================
+   CHAPTERS & PANELS
+   ===================================================================== */
+.chapter{ position:relative; padding:12svh max(16px, 4vw) 10svh; }
+.chapter-head{ max-width:1200px; margin:0 auto 6svh; }
+.chapter-head .eyebrow{ font:500 12px/1 var(--mono); letter-spacing:.3em; text-transform:uppercase; }
+.chapter-head h2{ margin:.15em 0 .1em; font:400 clamp(56px, 13vw, 190px)/.85 var(--display); text-transform:uppercase; }
+.chapter-head h2 .red{ color:var(--red); }
+.chapter-head p{ margin:.8em 0 0; max-width:46ch; font:700 clamp(16px, 1.6vw, 21px)/1.35 var(--cond); }
+
+/* the comic page grid */
+.page{
+  max-width:1200px; margin:0 auto;
+  display:grid; grid-template-columns:1fr; gap:calc(var(--gutter) * 1.6) var(--gutter);
+}
+.panel{ position:relative; min-height:340px; aspect-ratio:4/5; }
+.panel:nth-child(odd){ transform:rotate(-.5deg); }
+.panel:nth-child(even){ transform:rotate(.6deg); }
+@media (min-width:760px){
+  .page{ grid-template-columns:repeat(6, 1fr); grid-auto-rows:minmax(280px, 30vw); }
+  .panel{ aspect-ratio:auto; min-height:0; }
+  .p-2016{ grid-column:1 / span 4; grid-row:1; }
+  .p-2017{ grid-column:5 / span 2; grid-row:1 / span 2; }
+  .p-2021{ grid-column:1 / span 4; grid-row:2; }
+  .p-2023{ grid-column:1 / -1; grid-row:3 / span 2; }
+}
+@media (min-width:1200px){ .page{ grid-auto-rows:360px; } }
+
+.panel-inner{ position:absolute; inset:0; overflow:hidden; border:var(--border) solid var(--ink); background:var(--paper-2); }
+.panel .shadow{ position:absolute; inset:0; background:var(--ink); transform:translate(7px,7px); }
+
+/* layered art inside a panel: oversize box so scroll parallax never reveals an edge */
+.lyr{ position:absolute; inset:-9% -3%; }
+.lyr img{ width:100%; height:100%; object-fit:cover; object-position:62% 50%; }
+
+/* placeholder art: "drawing to come" — reads as an intentional pencil rough */
+.ph-grid{
+  background:
+    repeating-linear-gradient(0deg, transparent 0 39px, color-mix(in srgb, var(--pencil) 45%, transparent) 39px 40px),
+    repeating-linear-gradient(90deg, transparent 0 39px, color-mix(in srgb, var(--pencil) 45%, transparent) 39px 40px),
+    var(--paper-2);
+}
+.ph-dots{
+  opacity:.5;
+  background-image:radial-gradient(circle, var(--ink) 1.2px, transparent 1.6px); background-size:9px 9px;
+  -webkit-mask-image:linear-gradient(135deg, transparent 35%, #000 100%); mask-image:linear-gradient(135deg, transparent 35%, #000 100%);
+}
+.ph-year{
+  display:flex; align-items:center; justify-content:center;
+  font:400 clamp(110px, 22vw, 300px)/1 var(--display);
+  color:transparent; -webkit-text-stroke:2px var(--pencil);
+}
+.ph-brief{
+  position:absolute; right:6%; bottom:7%; max-width:min(78%, 34ch);
+  border-left:3px solid var(--pencil); padding-left:.6em; transform:rotate(-2deg);
+  font:600 clamp(17px, 1.6vw, 22px)/1.1 var(--hand); color:#2d5ea8;
+}
+.ph-brief b{ display:block; margin-bottom:.5em; font:500 10px/1 var(--mono); letter-spacing:.2em; text-transform:uppercase; color:var(--pencil); }
+
+/* narrative caption box (top-left of a panel) */
+.caption{
+  position:absolute; z-index:3; left:-6px; top:-10px; max-width:min(88%, 380px);
+  background:var(--paper); border:3px solid var(--ink); box-shadow:4px 4px 0 var(--ink);
+  padding:.65em .8em .7em;
+}
+.caption .yr{ font:500 11px/1 var(--mono); letter-spacing:.2em; color:var(--red); }
+.caption h3{ margin:.3em 0 .15em; font:900 clamp(17px, 1.7vw, 23px)/1.05 var(--cond); text-transform:uppercase; }
+.caption .role{ font:700 13px/1.2 var(--cond); opacity:.7; }
+.caption ul{ margin:.5em 0 0; padding:0 0 0 1em; font:400 14px/1.3 var(--cond); }
+
+.panel .bubble{ font-size:clamp(14px, 1.3vw, 17px); }
+
+/* onomatopoeia */
+.sfx{
+  position:absolute; z-index:3; pointer-events:none; transform:rotate(-10deg);
+  font:400 clamp(44px, 6vw, 92px)/.9 var(--sfx); letter-spacing:.02em;
+  color:var(--red); -webkit-text-stroke:2px var(--ink); paint-order:stroke fill;
+  text-shadow:4px 4px 0 var(--ink);
+}
+
+/* per-panel placement */
+.p-2016 .sfx{ right:5%; top:12%; }
+.p-2017 .ph-year{ font-size:clamp(90px, 12vw, 170px); }
+.p-2017 .bubble{ right:6%; bottom:34%; }
+.p-2021 .bubble{ right:5%; top:12%; }
+.p-2023 .panel-inner{ background:#f3efe6; }
+.p-2023 .ph-dots{ opacity:.25; }
+.p-2023 .bubble{ right:4%; top:10%; }
+.p-2023 .sfx{ left:6%; bottom:8%; transform:rotate(-6deg); }
+
+/* =====================================================================
+   STRIP — chapter 2, horizontal reading
+   ===================================================================== */
+.strip{ position:relative; overflow:hidden; background:var(--ink); color:var(--paper); }
+.strip-track{
+  display:flex; align-items:stretch; gap:var(--gutter); width:max-content;
+  height:100vh; height:100svh; padding:12svh 4vw 10svh;
+}
+.strip .s-head{ flex:none; width:min(80vw, 520px); display:flex; flex-direction:column; justify-content:center; padding-right:3vw; }
+.strip .s-head .eyebrow{ font:500 12px/1 var(--mono); letter-spacing:.3em; text-transform:uppercase; color:var(--red); }
+.strip .s-head h2{ margin:.15em 0 .2em; font:400 clamp(56px, 10vw, 150px)/.85 var(--display); text-transform:uppercase; }
+.strip .s-head p{ margin:0; max-width:32ch; font:700 18px/1.35 var(--cond); }
+
+.card{
+  position:relative; flex:none; width:min(78vw, 460px); display:flex; flex-direction:column;
+  background:var(--paper); color:var(--ink); border:3px solid var(--paper);
+  outline:3px solid var(--ink); outline-offset:-6px;
+}
+.card:nth-child(even){ transform:translateY(3svh) rotate(.8deg); }
+.card:nth-child(odd){ transform:rotate(-.6deg); }
+.card .c-art{ position:relative; flex:1; overflow:hidden; margin:6px 6px 0; border-bottom:3px solid var(--ink); }
+.card .c-body{ padding:14px 18px 18px; }
+.card .c-no{ font:500 11px/1 var(--mono); letter-spacing:.2em; color:var(--red); }
+.card h3{ margin:.25em 0 .2em; font:400 clamp(30px, 3vw, 42px)/.95 var(--display); text-transform:uppercase; }
+.card p{ margin:0; font:400 15px/1.35 var(--cond); }
+.card .todo{ font-family:var(--hand); font-size:20px; color:#2d5ea8; }
+.card.cta{ background:var(--red); }
+.card.cta .c-art{ display:flex; align-items:center; justify-content:center; background:var(--red); }
+.card.cta .c-art span{ font:400 clamp(60px, 7vw, 110px)/.85 var(--display); text-transform:uppercase; text-align:center; }
+
+/* =====================================================================
+   ENDING
+   ===================================================================== */
+.ending{ position:relative; padding:12svh max(16px, 4vw) 14svh; }
+.end-panel{
+  position:relative; max-width:1200px; min-height:70svh; margin:0 auto; overflow:hidden;
+  display:flex; flex-direction:column; justify-content:flex-end; padding:clamp(20px, 4vw, 56px);
+  border:var(--border) solid var(--ink); box-shadow:var(--shadow);
+  background:#1b1b1b url('../front-fond.webp') center/cover no-repeat; color:var(--paper);
+}
+.end-panel h2{ margin:0; font:400 clamp(60px, 12vw, 180px)/.85 var(--display); text-transform:uppercase; }
+.end-panel h2 .red{ color:var(--red); }
+.end-panel .bubble{ position:relative; max-width:40ch; margin:0 0 6svh auto; font-size:clamp(15px, 1.5vw, 19px); }
+.end-panel .bubble a{ font-weight:900; }
+.end-links{ display:flex; flex-wrap:wrap; gap:12px; margin-top:28px; }
+.btn{
+  display:inline-block; text-decoration:none; padding:12px 16px;
+  font:700 14px/1 var(--cond); letter-spacing:.06em; text-transform:uppercase;
+  background:var(--paper); color:var(--ink); border:3px solid var(--ink); box-shadow:4px 4px 0 var(--red);
+}
+.btn.red{ background:var(--red); color:var(--ink); box-shadow:4px 4px 0 var(--paper); }
+.btn:hover{ transform:translate(-2px,-2px); }
+footer{ padding:0 16px 40px; text-align:center; font:500 11px/1.6 var(--mono); letter-spacing:.2em; text-transform:uppercase; opacity:.6; }
+
+/* =====================================================================
+   EXPRESS — the plain résumé, for the recruiter in a hurry
+   ===================================================================== */
+#express{
+  width:min(900px, 100vw - 24px); max-height:min(92svh, 1100px); padding:0;
+  border:3px solid var(--ink); box-shadow:10px 10px 0 var(--red);
+  background:#f8f6f1; color:var(--ink);
+}
+#express::backdrop{ background:rgba(17,17,17,.75); }
+.x-head{ position:sticky; top:0; z-index:1; display:flex; justify-content:space-between; align-items:flex-start; gap:16px; padding:22px 24px 16px; background:var(--ink); color:var(--paper); }
+.x-head h2{ margin:0; font:400 34px/1 var(--display); text-transform:uppercase; }
+.x-head p{ margin:.3em 0 0; font:500 13px/1.3 var(--mono); }
+.x-close{ background:var(--red); color:var(--ink); border:0; font:700 14px/1 var(--cond); text-transform:uppercase; padding:10px 12px; cursor:pointer; }
+.x-body{ display:grid; grid-template-columns:1fr; gap:24px; padding:22px 24px 28px; font:400 15px/1.45 var(--cond); }
+@media (min-width:720px){ .x-body{ grid-template-columns:230px 1fr; } }
+.x-body h3{ margin:0 0 .5em; font:500 11px/1 var(--mono); letter-spacing:.25em; text-transform:uppercase; color:#666; }
+.x-body section p{ margin:0; }
+.x-body section + section{ margin-top:22px; }
+.x-body ul{ margin:0; padding:0 0 0 1.1em; }
+.x-job{ padding:12px 0; border-top:1px solid #ddd; }
+.x-job b{ font-size:17px; }
+.x-job .when{ font:500 12px/1 var(--mono); color:#666; }
+.x-dl{ margin-top:20px; }
+.chips{ display:flex; flex-wrap:wrap; gap:6px; }
+.chips span{ font:500 12px/1 var(--mono); border:1px solid #aaa; padding:5px 7px; }
+
+/* reduced motion: everything readable, nothing moves */
+@media (prefers-reduced-motion:reduce){ #progress{ display:none; } }
