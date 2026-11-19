@@ -7,7 +7,7 @@
              atL = on landscape screens.
              caption {eyebrow,title,text,tag} · bubble {text, cls:'r'|'l'} · sfx {text}
              big {text} · sticker {text, cls:'red'|'dark'} · cta / links {links:[{href,text,cls}]}
-             grid {cases:[{yr,title,todo,src,pos,alt,ico}]} · pin / char {src,label,alt} · icon {src,alt}
+             grid {cases:[{yr,title,todo,src,pos,alt,ico,bg,href,url}]} (bg = logo shown whole on that colour) · pin / char {src,label,alt} · icon {src,alt}
    notes   : grey technical annotations, drawn line by line.
              space 'scene' = % of the layer image (sticks to the drawing),
              'face' = % of the cube face.
@@ -123,12 +123,12 @@ const FACES = {
         at:`left:4vw;top:${SAFE_TOP}`, atL:'left:4vw;top:4svh' },
       { type:'grid', cls:'six', depth:20, at:'left:4vw;right:4vw;top:31svh;bottom:15svh', atL:'left:40vw;right:4vw;top:12svh;bottom:20svh',
         cases:[
-          { yr:'#01', title:'AS7 Park', todo:'pitch + demo link' },
-          { yr:'#02', title:'GRG Group', todo:'pitch + link' },
+          { yr:'#01', title:'AS7 Park', src:'case-as7.webp', bg:'#fcbc00', alt:'AS7 Park logo', href:'https://e-commerce-git-dev-as7park1.vercel.app/', url:'demo' },
+          { yr:'#02', title:'GRG Group', src:'case-grg.webp', bg:'#fff', alt:'GRG Group logo', href:'https://grg-groupe.com', url:'grg-groupe.com' },
           { yr:'#03', title:'Holographic 3D résumé', todo:'capture / video' },
-          { yr:'#04', title:'NawStar', todo:'pitch + link' },
+          { yr:'#04', title:'NawStar', src:'case-nawstar.webp', bg:'#efd6ef', alt:'NawStar logo', href:'https://nawstar.vercel.app', url:'nawstar.vercel.app' },
           { yr:'#05', title:'Catalog automation · InDesign × Excel', src:'case-catalog.webp', pos:'30% 30%', alt:'Screenshot: InDesign catalog page generated from an Excel sheet with EasyCatalog', ico:['logo-xl.webp'] },
-          { yr:'#06', title:'Project six', todo:'title + pitch + link' },
+          { yr:'#06', title:'Thower', src:'case-thower.webp', bg:'#e1e1e1', alt:'Thower logo: an impossible triangle', href:'https://thower.fr', url:'thower.fr' },
         ] },
       { type:'char', cls:'fig-r', depth:34, src:'char-preh.webp', label:'fig. 8 — the elder', alt:'Character design: a prehistoric elder wearing a horned bull skull, sitting cross-legged',
         at:'right:3vw;top:11svh;width:38vw', atL:'left:-2vw;top:41svh;width:min(29vw, 48svh)' },
@@ -229,13 +229,18 @@ function itemHTML(it, i, k){
     case 'sticker': case 'big':
       inner = it.text; break;
     case 'grid':
-      inner = it.cases.map(c => `<div class="case">${
-        c.src ? `<div class="case-art" style="--pos:${c.pos || '50% 50%'}">${img(c.src, c.alt)}</div>` : `<span class="yr" aria-hidden="true">${esc(c.yr)}</span>`
-      }<div class="cap"><small>${esc(c.yr)}</small><b>${esc(c.title)}</b></div>${
-        c.todo ? `<div class="todo">${esc(c.todo)}</div>` : ''
-      }${
-        c.ico ? `<div class="case-ico">${c.ico.map(src => img(src)).join('')}</div>` : ''
-      }</div>`).join('');
+      inner = it.cases.map(c => {
+        const tag = c.href ? 'a' : 'div';
+        return `<${tag} class="case"${c.href ? ` href="${c.href}" target="_blank" rel="noopener" draggable="false"` : ''}>${
+          c.src ? `<div class="case-art${c.bg ? ' fit' : ''}" style="--pos:${c.pos || '50% 50%'}${c.bg ? `;--bg:${c.bg}` : ''}">${img(c.src, c.alt)}</div>` : `<span class="yr" aria-hidden="true">${esc(c.yr)}</span>`
+        }<div class="cap"><small>${esc(c.yr)}</small><b>${esc(c.title)}</b></div>${
+          c.todo ? `<div class="todo">${esc(c.todo)}</div>` : ''
+        }${
+          c.url ? `<span class="url">${esc(c.url)} ↗</span>` : ''
+        }${
+          c.ico ? `<div class="case-ico">${c.ico.map(src => img(src)).join('')}</div>` : ''
+        }</${tag}>`;
+      }).join('');
       break;
     case 'links': case 'cta':
       inner = it.links.map(l => `<a class="${it.type === 'cta' ? 'go' : 'btn'} ${l.cls || ''}" href="${l.href}"${l.href.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>${esc(l.text)}</a>`).join('');
@@ -429,9 +434,12 @@ document.querySelectorAll('.arrow').forEach(b => b.addEventListener('click', () 
 
 // drag: the cube and the page follow the finger, then commit or spring back
 if (fine) document.body.classList.add('grab');
-let drag = null;
+let drag = null, dragged = false;
+// a swipe that started on a project card must not open its link
+addEventListener('click', e => { if (dragged && e.target.closest('a.case')){ e.preventDefault(); dragged = false; } }, true);
 addEventListener('pointerdown', e => {
-  if (dlg.open || e.button > 0 || e.target.closest('button, a, dialog')) return;
+  if (dlg.open || e.button > 0 || e.target.closest('button, a:not(.case), dialog')) return; // project cards stay swipeable
+  dragged = false;
   drag = { x0:e.clientX, y0:e.clientY, axis:null, a:0, sign:0, vx:0, vy:0, lx:e.clientX, ly:e.clientY, lt:performance.now() };
   document.body.classList.add('grabbing');
 });
@@ -460,6 +468,7 @@ function endDrag(){
   const d = drag; drag = null;
   document.body.classList.remove('grabbing');
   if (!d.axis) return;
+  dragged = true;
   const v = d.axis === 'h' ? d.vx : -d.vy;
   const commit = Math.abs(d.a) > PI2 * (touch ? .2 : .28) || (Math.abs(v) > (touch ? .25 : .45) && Math.sign(v) === Math.sign(d.a));
   if (commit) roll(d.axis === 'h' ? (d.a < 0 ? 'right' : 'left') : (d.a > 0 ? 'down' : 'up'), true);
