@@ -82,7 +82,7 @@ const FACES = {
         cases:[
           { yr:'2016', title:'Pre-press & industrial calibration', src:'case-classroom.webp', pos:'50% 60%', alt:'Pencil sketch: a computer classroom' },
           { yr:'17', title:'3D modeling & event scenography', src:'case-cave.webp', pos:'45% 55%', alt:'Illustration: a caveman by a fire, lit like a stage' },
-          { yr:'2021', title:'Web design, branding & social', src:'case-coder.webp', pos:'50% 25%', alt:'Drawing: a young designer with headphones, typing', ico:['logo-id.webp'] },
+          { yr:'2021', title:'Web design, branding & social', src:'case-coder.webp', pos:'50% 25%', alt:'Drawing: a young designer with headphones, typing', ico:['logo-ps.webp', 'logo-ai.webp'] },
           { yr:'25', title:'Art direction & digital automation', src:'case-back.webp', pos:'62% 40%', alt:'Drawing: Val crashed on a mattress, laptop and books around', ico:['logo-xl.webp', 'logo-id.webp'] },
         ] },
       { type:'char', cls:'fig-r', depth:30, src:'char-pilgrims.webp', label:'fig. 7 — character design · pilgrims', alt:'Character design: two cloaked figures in wide mushroom hats',
